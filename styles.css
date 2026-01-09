@@ -1,0 +1,327 @@
+/**
+ * PBI Checker - Dashboard Widget Styles
+ * Glassmorphism design with smooth animations
+ */
+
+/* ========================================
+   Dashboard Widget Container
+   ======================================== */
+#pbi-dashboard-widget {
+  position: relative;
+  width: 100%;
+  max-width: 768px;
+  height: 48px;
+  margin: 8px auto;
+  padding: 0 16px;
+  
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  
+  /* Glassmorphism */
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  
+  /* Typography */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  
+  /* Animation */
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  
+  /* Z-index to stay on top */
+  z-index: 9999;
+  
+  /* Hidden by default */
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#pbi-dashboard-widget.visible {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Light mode support */
+@media (prefers-color-scheme: light) {
+  #pbi-dashboard-widget {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: rgba(0, 0, 0, 0.85);
+  }
+}
+
+/* ========================================
+   Score Section (Left)
+   ======================================== */
+.pbi-score-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.pbi-brain-icon {
+  font-size: 20px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.pbi-score-value {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 48px;
+  text-align: right;
+}
+
+/* Score color classes */
+.pbi-score-value.score-critical { color: #ef4444; }
+.pbi-score-value.score-warning { color: #f97316; }
+.pbi-score-value.score-moderate { color: #eab308; }
+.pbi-score-value.score-good { color: #22c55e; }
+
+/* ========================================
+   Critique Section (Center)
+   ======================================== */
+.pbi-critique-section {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  height: 24px;
+}
+
+.pbi-critique-text {
+  white-space: nowrap;
+  display: inline-block;
+  padding-left: 100%;
+  animation: marquee 12s linear infinite;
+  animation-play-state: paused;
+}
+
+.pbi-critique-section:hover .pbi-critique-text {
+  animation-play-state: running;
+}
+
+.pbi-critique-text.short {
+  padding-left: 0;
+  animation: none;
+  text-align: center;
+  width: 100%;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+.pbi-critique-placeholder {
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
+@media (prefers-color-scheme: light) {
+  .pbi-critique-placeholder {
+    color: rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* ========================================
+   Status Section (Right)
+   ======================================== */
+.pbi-status-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pbi-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: none;
+}
+
+.pbi-spinner.active {
+  display: block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.pbi-status-icon {
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+.pbi-status-icon.ready { color: #22c55e; }
+.pbi-status-icon.error { color: #ef4444; }
+
+/* ========================================
+   Action Item Tooltip
+   ======================================== */
+.pbi-action-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  
+  background: rgba(0, 0, 0, 0.95);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  max-width: 300px;
+  white-space: normal;
+  text-align: center;
+  
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  
+  z-index: 10000;
+}
+
+.pbi-action-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.95);
+}
+
+#pbi-dashboard-widget:hover .pbi-action-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ========================================
+   Axis Breakdown (Compact)
+   ======================================== */
+.pbi-axis-breakdown {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  right: 16px;
+  margin-bottom: 8px;
+  padding: 12px;
+  
+  background: rgba(0, 0, 0, 0.95);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  
+  z-index: 10000;
+}
+
+.pbi-axis-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.pbi-axis-row:last-child {
+  margin-bottom: 0;
+}
+
+.pbi-axis-label {
+  opacity: 0.7;
+}
+
+.pbi-axis-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pbi-score-section:hover + .pbi-axis-breakdown,
+.pbi-axis-breakdown:hover {
+  display: block;
+}
+
+/* ========================================
+   Send Button Blocker Overlay
+   ======================================== */
+.pbi-send-blocker {
+  position: relative;
+}
+
+.pbi-send-blocker::after {
+  content: '🧠 PBI 점수가 너무 낮습니다!';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: inherit;
+  
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.pbi-send-blocker.blocked::after {
+  opacity: 1;
+}
+
+.pbi-send-blocker.blocked {
+  pointer-events: none !important;
+  opacity: 0.5;
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+@media (max-width: 600px) {
+  #pbi-dashboard-widget {
+    height: 40px;
+    padding: 0 12px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+  
+  .pbi-score-value {
+    font-size: 16px;
+    min-width: 40px;
+  }
+  
+  .pbi-brain-icon {
+    font-size: 16px;
+  }
+  
+  .pbi-critique-section {
+    display: none;
+  }
+}

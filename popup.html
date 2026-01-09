@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PBI Checker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 320px;
+      min-height: 200px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+    }
+    
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .header-icon {
+      font-size: 32px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    .header-text h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    
+    .header-text p {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .status-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .status-row:last-child {
+      margin-bottom: 0;
+    }
+    
+    .status-label {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .status-value {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    
+    .status-value.ready {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+    
+    .status-value.loading {
+      background: rgba(234, 179, 8, 0.2);
+      color: #eab308;
+    }
+    
+    .status-value.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+    
+    .toggle-section {
+      margin-bottom: 16px;
+    }
+    
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .toggle-row:last-child {
+      border-bottom: none;
+    }
+    
+    .toggle-info {
+      flex: 1;
+    }
+    
+    .toggle-label {
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+    
+    .toggle-desc {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    
+    /* Toggle Switch */
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+    
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      transition: 0.3s;
+    }
+    
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+    
+    .toggle-switch input:checked + .toggle-slider {
+      background: #3b82f6;
+    }
+    
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(20px);
+    }
+    
+    .footer {
+      text-align: center;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.4);
+    }
+    
+    .footer a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+    
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="header-icon">🧠</span>
+    <div class="header-text">
+      <h1>PBI Checker</h1>
+      <p>Anti-Brainrot Protocol</p>
+    </div>
+  </div>
+  
+  <div class="status-card">
+    <div class="status-row">
+      <span class="status-label">AI Status</span>
+      <span id="ai-status" class="status-value loading">Checking...</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Current Site</span>
+      <span id="site-status" class="status-value">--</span>
+    </div>
+  </div>
+  
+  <div class="toggle-section">
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Enable PBI Checker</div>
+        <div class="toggle-desc">Monitor prompts on LLM sites</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-enabled" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Block Low Scores</div>
+        <div class="toggle-desc">Dim send button if PBI &lt; 30%</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-block">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    
+    <div class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-label">Debug Mode</div>
+        <div class="toggle-desc">Log detailed analysis info</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-debug">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <p>v1.0.0 · <a href="https://github.com" target="_blank">GitHub</a></p>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
