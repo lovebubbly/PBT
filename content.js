@@ -10,48 +10,16 @@ console.log('[PBI Checker] 🧠 Initializing Brainrot Protocol...');
 // ========================================
 
 const PBI_SYSTEM_PROMPT = `
-You are the "PBI Checker," a strict and sarcastic AI prompt engineer coaching a user to stop "Brainrot" (cognitive laziness).
+You are PBI Checker. Score the user's prompt 0-100.
 
-Your task is to evaluate the user's prompt based on the following **Prompt Brainrot Index (PBI)** rubric.
-Calculate the total score (0-100%) and identify the specific "Brainrot" symptoms.
+Axes (25 pts each):
+- logic: Clear goal & causality
+- completeness: Output format specified
+- constraints: Tone/rules defined
+- erosion_risk: User stays in the loop (not outsourcing thinking)
 
-### 📊 Scoring Rubric (4 Axes)
-
-1. **Logic (Target: 25pts)**
-   - **High Score:** Clear objective, logical causality, specific context provided.
-   - **Low Score:** Vague goals, emotional appeals (e.g., "I'm sad, help me"), or lack of context.
-
-2. **Completeness (Target: 25pts)**
-   - **High Score:** Specifies output format (e.g., table, JSON, code), table of contents, depth, and priorities.
-   - **Low Score:** "Omakase" style (e.g., "Just do it for me," "You decide"), missing requirements.
-
-3. **Constraints (Target: 25pts)**
-   - **High Score:** Explicitly sets language, tone, prohibitions (e.g., "No glazing," "No bullet points").
-   - **Low Score:** No guardrails, leaving room for hallucinations or generic fluff.
-
-4. **User Capability Erosion Risk (Target: 25pts) [CRITICAL]**
-   - **High Score (Low Risk):** The user asks for a specific tool/method to solve it *themselves* (e.g., "Give me the boilerplate," "Explain the logic").
-   - **Low Score (High Risk):** The user delegates the *entire* thinking process (e.g., "Write my essay," "Plan my life"). The user acts as a consumer, not an architect.
-
-### 🚨 Diagnosis Rules
-- **0-30% (Terminal Brainrot):** Lazy, vague, totally dependent. Critique harshly.
-- **31-60% (High Risk):** Needs more specific constraints or logic.
-- **61-80% (Moderate):** Good, but missing technical details.
-- **81-100% (Lucid):** Perfect engineering prompt.
-
-### 📤 Output Format (JSON Only)
-You must output a raw JSON object with no markdown block.
-{
-  "total_score": <number 0-100>,
-  "axis_scores": {
-    "logic": <0-25>,
-    "completeness": <0-25>,
-    "constraints": <0-25>,
-    "erosion_risk": <0-25>
-  },
-  "critique_ko": "<A short, biting sarcastic comment in Korean. Max 1 sentence. Use casual tone like '님아...', '...하시겠습니까?'>",
-  "action_item": "<One specific instruction to fix the prompt immediately>"
-}
+Output JSON only:
+{"total_score":<0-100>,"axis_scores":{"logic":<0-25>,"completeness":<0-25>,"constraints":<0-25>,"erosion_risk":<0-25>},"action_item":"<specific fix instruction>"}
 `;
 
 const REFINE_SYSTEM_PROMPT = `
@@ -128,43 +96,29 @@ let debounceTimer = null;
 let isAnalyzing = false;
 let isRefining = false;
 let lastAnalyzedText = '';
-let lastAnalysisResult = null; // NEW: Store last analysis result for adaptive refinement
+let lastAnalysisResult = null;
+let lastRefineTime = 0; // Cooldown: skip analysis for 2s after refine
 let dashboardWidget = null;
 let currentSiteConfig = null;
 let observer = null;
 
-// NEW: Adaptive Refinement Strategies (Dynamic Prompt Injection)
+// Adaptive Refinement Strategies (Simplified for Speed)
 const REFINE_STRATEGIES = {
     logic: {
         threshold: 18,
-        instruction: `> **🔧 Logic Reinforcement Protocol**:
-The user's request lacks causal reasoning. You MUST:
-1. Explicitly define the 'Objective' and 'Key Results'.
-2. Use a 'Chain of Thought' structure (Step 1 -> Step 2 -> Outcome).
-3. Remove vague terms like "appropriately" or "good".`
+        instruction: `Add clear Objective and Step-by-Step structure.`
     },
     completeness: {
         threshold: 18,
-        instruction: `> **🔧 Completeness Protocol**:
-The user's specifications are missing. You MUST:
-1. Define the specific 'Output Format' (e.g., Markdown Table, JSON, Python Script).
-2. Add a 'Table of Contents' or 'Structure' section.
-3. Fill in missing details with professional assumptions (and state them).`
+        instruction: `Specify Output Format (Markdown/JSON/Code) and Structure.`
     },
     constraints: {
         threshold: 18,
-        instruction: `> **🔧 Safety & Constraints Protocol**:
-The user provided no guardrails. You MUST:
-1. Add a '## Constraints' section.
-2. Include at least 3 negative constraints (e.g., "Do not use flowery language", "No moralizing").
-3. Set the Tone & Manner explicitly.`
+        instruction: `Add Constraints section with 3 negative rules and Tone.`
     },
     erosion_risk: {
         threshold: 15,
-        instruction: `> **🚨 Cognitive Agency Protocol**:
-The user is trying to outsource critical thinking (High Brainrot Risk).
-- DO NOT write the final essay/code directly if it replaces the user's judgment.
-- INSTEAD, rewrite the prompt to ask for a "Framework," "Drafting Guide," or "Review Criteria" so the user stays in the loop.`
+        instruction: `Request a Framework/Guide instead of final output.`
     }
 };
 
@@ -288,6 +242,12 @@ async function createSession(mode = 'analysis', customSystemPrompt = null) {
 async function analyzePBI(userPrompt) {
     if (isAnalyzing || isRefining) {
         console.log('[PBI Checker] Analysis already in progress, skipping...');
+        return null;
+    }
+
+    // Cooldown: skip analysis for 2 seconds after Refine
+    if (Date.now() - lastRefineTime < 2000) {
+        console.log('[PBI Checker] Cooldown active, skipping analysis...');
         return null;
     }
 
@@ -423,10 +383,12 @@ Refine this now.
             inputElement.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
+        // Set cooldown timestamp to prevent immediate re-analysis
+        lastRefineTime = Date.now();
         updateDashboardState('ready');
 
-        // Re-analyze
-        setTimeout(() => analyzePBI(refinedText), 500);
+        // Skip auto re-analysis (user can manually trigger if needed)
+        // setTimeout(() => analyzePBI(refinedText), 500);
 
     } catch (err) {
         console.error('[PBI Checker] Refinement error:', err);
@@ -781,7 +743,7 @@ function updateDashboardWithResult(result) {
     }
 
     // Update critique
-    critiqueText.textContent = result.critique_ko;
+    critiqueText.textContent = result.action_item || 'No suggestion';
     critiqueText.classList.remove('pbi-critique-placeholder');
 
     // Handle marquee for long text

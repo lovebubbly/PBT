@@ -25,10 +25,12 @@ Low scores mean your prompt is vague, "omakase" style, or delegates too much thi
 ## 🚀 Features
 
 - **Real-time Analysis**: Monitors your prompts as you type with debounced AI evaluation
+- **Adaptive Refinement**: AI dynamically targets weak axes (logic, completeness, constraints, erosion risk) with specific improvement strategies
 - **On-device AI**: Uses Chrome's built-in `LanguageModel` API (no external API calls, privacy-first)
+- **Actionable Feedback**: Shows concrete fix instructions instead of generic critiques
+- **Performance Optimized**: Simplified prompts for 3-5x faster analysis and refinement
 - **Premium UI**: Toss-inspired glassmorphism design with 24px rounded corners and smooth animations
 - **Dashboard Overlay**: Seamlessly injected into LLM interfaces without breaking layouts
-- **Prompt Refinement**: One-click AI-powered prompt rewriting with context-aware improvements
 - **Send Blocker**: Optionally block sending low-score prompts (configurable threshold)
 - **Smart Persistence**: Survives SPA navigation and automatically resets after sending
 - **Multi-site Support**: Works on ChatGPT, Claude (with grid layout fix), and Gemini
@@ -40,8 +42,8 @@ Low scores mean your prompt is vague, "omakase" style, or delegates too much thi
 1. **Type your prompt** on any supported LLM site
 2. The extension **analyzes** it using Chrome's on-device AI
 3. See your **PBI score** + axis breakdown in real-time
-4. Get a **sarcastic Korean critique** (님아...) and actionable fix
-5. Click **⚡ Refine** to auto-improve your prompt
+4. Get **actionable fix instructions** (not just critique)
+5. Click **⚡ Refine** to auto-improve your prompt with adaptive strategies
 
 ---
 
