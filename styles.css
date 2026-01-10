@@ -1,62 +1,110 @@
 /**
- * PBI Checker - Dashboard Widget Styles
- * Glassmorphism design with smooth animations
+ * PBI Checker - Premium Design v3.0
+ * Inspired by Toss-style Design Philosophy
+ * Clean, Modern, Gradient-Rich with Smooth Animations
  */
 
 /* ========================================
-   Dashboard Widget Container
+   CSS Variables (Scoped)
+   ======================================== */
+#pbi-dashboard-widget {
+  /* Core Colors (Toss Dark Mode Style) */
+  --pbi-bg: rgba(16, 16, 19, 0.9);
+  /* #101013 Deep Black */
+  --pbi-card: #20202C;
+  /* #20202C Dark Card */
+  --pbi-border: rgba(51, 61, 75, 0.5);
+  /* #333D4B Muted Border */
+  --pbi-text: #FFFFFF;
+  --pbi-text-sub: #8B95A1;
+  /* #8B95A1 Toss Muted Foreground */
+  --pbi-primary: #3182F6;
+  /* #3182F6 Toss Blue */
+
+  /* Design Tokens */
+  --pbi-radius: 24px;
+  /* 3.1: rounded-[24px] */
+  --pbi-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --pbi-transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Typography */
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* ========================================
+   Main Container
    ======================================== */
 #pbi-dashboard-widget {
   position: relative;
   width: 100%;
-  max-width: 768px;
-  height: 48px;
-  margin: 8px auto;
-  padding: 0 16px;
-  
+  max-width: 720px;
+  min-height: 56px;
+  height: auto;
+  margin: 12px auto;
+  padding: 14px 20px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  
-  /* Glassmorphism */
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  
-  /* Typography */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  gap: 16px;
+
+  /* Glassmorphism Pro */
+  background: var(--pbi-bg);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--pbi-border);
+  border-radius: var(--pbi-radius);
+  box-shadow: var(--pbi-shadow);
+
+  color: var(--pbi-text);
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
-  
-  /* Animation */
+
+  /* Premium Entrance Animation */
   opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  
-  /* Z-index to stay on top */
+  transform: translateY(16px) scale(0.96);
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.3s ease;
+
   z-index: 9999;
-  
-  /* Hidden by default */
   visibility: hidden;
   pointer-events: none;
 }
 
+#pbi-dashboard-widget::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--pbi-radius);
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 50%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+#pbi-dashboard-widget:hover {
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(59, 130, 246, 0.1);
+}
+
 #pbi-dashboard-widget.visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
   visibility: visible;
   pointer-events: auto;
 }
 
-/* Light mode support */
+/* Light Mode */
 @media (prefers-color-scheme: light) {
   #pbi-dashboard-widget {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(0, 0, 0, 0.1);
-    color: rgba(0, 0, 0, 0.85);
+    --pbi-bg: rgba(255, 255, 255, 0.95);
+    --pbi-border: rgba(0, 0, 0, 0.06);
+    --pbi-text: #1a1a2e;
+    --pbi-text-sub: #6b7280;
+    --pbi-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -66,78 +114,80 @@
 .pbi-score-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
-  min-width: 80px;
 }
 
 .pbi-brain-icon {
-  font-size: 20px;
-  animation: pulse 2s ease-in-out infinite;
+  font-size: 24px;
+  filter: drop-shadow(0 2px 8px rgba(255, 100, 100, 0.3));
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
+.pbi-score-section:hover .pbi-brain-icon {
+  transform: scale(1.15) rotate(-8deg);
 }
 
 .pbi-score-value {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
-  min-width: 48px;
+  min-width: 58px;
   text-align: right;
+  letter-spacing: -0.03em;
+  transition: var(--pbi-transition);
 }
 
-/* Score color classes */
-.pbi-score-value.score-critical { color: #ef4444; }
-.pbi-score-value.score-warning { color: #f97316; }
-.pbi-score-value.score-moderate { color: #eab308; }
-.pbi-score-value.score-good { color: #22c55e; }
+/* Score Colors with Glow */
+.pbi-score-value.score-critical {
+  color: #ff4757;
+  text-shadow: 0 0 20px rgba(255, 71, 87, 0.5);
+}
+
+.pbi-score-value.score-warning {
+  color: #ffa502;
+  text-shadow: 0 0 16px rgba(255, 165, 2, 0.4);
+}
+
+.pbi-score-value.score-moderate {
+  color: #ffc107;
+}
+
+.pbi-score-value.score-good {
+  color: #2ed573;
+  text-shadow: 0 0 16px rgba(46, 213, 115, 0.4);
+}
 
 /* ========================================
    Critique Section (Center)
    ======================================== */
 .pbi-critique-section {
   flex: 1;
-  overflow: hidden;
-  position: relative;
-  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  border-left: 1px solid var(--pbi-border);
+  border-right: 1px solid var(--pbi-border);
+  min-height: 28px;
 }
 
 .pbi-critique-text {
-  white-space: nowrap;
-  display: inline-block;
-  padding-left: 100%;
-  animation: marquee 12s linear infinite;
-  animation-play-state: paused;
-}
-
-.pbi-critique-section:hover .pbi-critique-text {
-  animation-play-state: running;
-}
-
-.pbi-critique-text.short {
-  padding-left: 0;
-  animation: none;
-  text-align: center;
   width: 100%;
-}
-
-@keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-100%); }
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--pbi-text);
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .pbi-critique-placeholder {
-  color: rgba(255, 255, 255, 0.4);
-  font-style: italic;
-}
-
-@media (prefers-color-scheme: light) {
-  .pbi-critique-placeholder {
-    color: rgba(0, 0, 0, 0.4);
-  }
+  color: var(--pbi-text-sub);
+  font-style: normal;
+  font-weight: 400;
 }
 
 /* ========================================
@@ -146,17 +196,66 @@
 .pbi-status-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
+/* Premium Refine Button */
+.pbi-refine-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15));
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #a78bfa;
+
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.pbi-refine-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+
+.pbi-refine-btn:hover::before {
+  transform: translateX(100%);
+}
+
+.pbi-refine-btn:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.25));
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.25);
+}
+
+.pbi-refine-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Spinner - Premium */
 .pbi-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #3b82f6;
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #6366f1;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.7s linear infinite;
   display: none;
 }
 
@@ -165,131 +264,89 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
+/* Status Icons */
 .pbi-status-icon {
-  font-size: 16px;
-  opacity: 0.7;
+  font-size: 18px;
+  transition: var(--pbi-transition);
 }
 
-.pbi-status-icon.ready { color: #22c55e; }
-.pbi-status-icon.error { color: #ef4444; }
+.pbi-status-icon.ready {
+  color: #2ed573;
+  filter: drop-shadow(0 0 6px rgba(46, 213, 115, 0.5));
+}
+
+.pbi-status-icon.error {
+  color: #ff4757;
+}
 
 /* ========================================
-   Action Item Tooltip
+   Tooltip - Premium
    ======================================== */
 .pbi-action-tooltip {
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 12px);
   left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 8px;
-  padding: 8px 12px;
-  
-  background: rgba(0, 0, 0, 0.95);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.9);
-  white-space: nowrap;
-  max-width: 300px;
-  white-space: normal;
+  transform: translateX(-50%) translateY(8px);
+
+  background: rgba(10, 10, 18, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.5;
   text-align: center;
-  
+  white-space: normal;
+  max-width: 300px;
+  width: max-content;
+
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
-  
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 10000;
-}
-
-.pbi-action-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 6px solid transparent;
-  border-top-color: rgba(0, 0, 0, 0.95);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 #pbi-dashboard-widget:hover .pbi-action-tooltip {
   opacity: 1;
   visibility: visible;
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ========================================
-   Axis Breakdown (Compact)
-   ======================================== */
-.pbi-axis-breakdown {
-  display: none;
-  position: absolute;
-  bottom: 100%;
-  right: 16px;
-  margin-bottom: 8px;
-  padding: 12px;
-  
-  background: rgba(0, 0, 0, 0.95);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.8);
-  
-  z-index: 10000;
-}
-
-.pbi-axis-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 4px;
-}
-
-.pbi-axis-row:last-child {
-  margin-bottom: 0;
-}
-
-.pbi-axis-label {
-  opacity: 0.7;
-}
-
-.pbi-axis-value {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.pbi-score-section:hover + .pbi-axis-breakdown,
-.pbi-axis-breakdown:hover {
-  display: block;
-}
-
-/* ========================================
-   Send Button Blocker Overlay
+   Send Blocker - Scary Red
    ======================================== */
 .pbi-send-blocker {
-  position: relative;
+  position: relative !important;
 }
 
 .pbi-send-blocker::after {
-  content: '🧠 PBI 점수가 너무 낮습니다!';
+  content: '🧠 PBI Low';
   position: absolute;
-  inset: 0;
+  inset: -8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  
-  background: rgba(239, 68, 68, 0.9);
+
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  backdrop-filter: blur(4px);
   color: white;
   font-size: 11px;
-  font-weight: 600;
-  border-radius: inherit;
-  
-  pointer-events: none;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  border-radius: 10px;
+
+  pointer-events: auto;
+  cursor: not-allowed;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: all 0.2s ease;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
 }
 
 .pbi-send-blocker.blocked::after {
@@ -298,30 +355,28 @@
 
 .pbi-send-blocker.blocked {
   pointer-events: none !important;
-  opacity: 0.5;
 }
 
 /* ========================================
-   Responsive Design
+   Responsive
    ======================================== */
 @media (max-width: 600px) {
   #pbi-dashboard-widget {
-    height: 40px;
-    padding: 0 12px;
-    font-size: 12px;
-    border-radius: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 16px;
   }
-  
-  .pbi-score-value {
-    font-size: 16px;
-    min-width: 40px;
-  }
-  
-  .pbi-brain-icon {
-    font-size: 16px;
-  }
-  
+
   .pbi-critique-section {
-    display: none;
+    border: none;
+    border-top: 1px solid var(--pbi-border);
+    border-bottom: 1px solid var(--pbi-border);
+    padding: 10px 0;
+  }
+
+  .pbi-status-section {
+    justify-content: center;
   }
 }
