@@ -54,6 +54,35 @@ You must output a raw JSON object with no markdown block.
 }
 `;
 
+const REFINE_SYSTEM_PROMPT = `
+You are a "Strict Logic Architect".Your goal is to rewrite vague user prompts into high - precision engineering specifications(PBI Score 100 %).
+
+### ⚡ Transformation Protocols
+1. ** Context Injection **: If the user lacks context, infer the most logical scenario(e.g., "coding" -> "senior software engineer context").
+2. ** Format Enforcement **: Always specify the output format(Markdown table, JSON, Code block, etc.).
+3. ** Anti - Hallucination **: Add constraints like "Do not invent facts," "If unsure, ask for clarification," "No preambles/filler."
+4. ** Erosion Prevention **: Instead of asking the AI to "think for me," ask the AI to "provide a framework" or "critique my logic."
+
+### 📝 Few - Shot Examples(Follow this structure)
+
+    ** Input:** "Write a blog post about AI."
+        ** Refined:**
+            "Act as a Senior Tech Journalist. Write a 1,500-word analytical blog post about 'The Impact of LLMs on Junior Developers'.
+            [Structure]: Introduction(Market Data) -> Core Arguments(3 points) -> Counter - arguments -> Conclusion.
+[Tone]: Professional, Insightful, No hype / buzzwords.
+[Format]: Markdown with H2 / H3 headers.
+[Constraint]: Focus on technical accuracy over engagement metrics."
+
+    ** Input:** "Fix this code."
+        ** Refined:**
+            "Act as a Senior Python Developer. Review the attached code snippet for: 1. Time Complexity (Big O), 2. Memory Leaks, 3. PEP8 Compliance.
+            [Constraint]: Do not rewrite the whole code; only provide the optimized diffs and a short explanation for each change.
+[Output]: Logic explanation followed by the code block."
+
+### 🚨 Final Instructions
+    - REMOVE all emotional language(e.g., "please," "I'm desperate").
+- Output ** ONLY ** the refined prompt text.Do not add "Here is the refined version".
+`;
 const SITE_CONFIGS = {
     'chatgpt.com': {
         inputSelector: '#prompt-textarea, [data-testid="composer-background"] textarea',
@@ -178,25 +207,28 @@ async function createSession(mode = 'analysis') {
             options.initialPrompts = [
                 {
                     role: 'system',
-                    content: `You are an expert Prompt Engineer. Your task is to rewrite user prompts to be perfect (100% score) based on the provided critique.
-Rules:
-1. Keep the user's original intent specific and clear.
-2. Apply constraints, format requirements, and context.
-3. Remove emotional language or vagueness.
-4. Output ONLY the refined prompt text. No explanations.`
+                    content: REFINE_SYSTEM_PROMPT
                 }
             ];
         }
 
-        console.log(`[PBI Checker] Creating new session (Mode: ${mode})...`);
+        console.log(`[PBI Checker] Creating new session(Mode: ${mode})...`);
 
         currentSession = await LanguageModel.create(options);
 
         // Add progress monitor if supported
         if (currentSession.addEventListener) {
             currentSession.addEventListener('downloadprogress', (e) => {
-                const progress = Math.round((e.loaded / e.total) * 100);
-                updateDashboardState('downloading', `Downloading model: ${progress}%`);
+                const progress = (e.loaded / e.total) * 100;
+                console.log(`[PBI Checker] Model loading / download: ${progress.toFixed(1)}% `);
+
+                // Only show "Downloading" in UI if it's NOT available yet (true download)
+                // If it is 'available', it's just loading into memory
+                if (availability === 'available') {
+                    updateDashboardState('downloading', `Loading AI...`);
+                } else {
+                    updateDashboardState('downloading', `Downloading model: ${Math.round(progress)}% `);
+                }
             });
         }
 
@@ -229,7 +261,7 @@ Now, evaluate the following user prompt based on the rubric above.
 
 User Prompt:
 "${userPrompt}"
-`;
+    `;
 
         console.log('[PBI Checker] Sending prompt for analysis...');
         const startTime = performance.now();
@@ -237,7 +269,7 @@ User Prompt:
         const result = await currentSession.prompt(promptText);
 
         const elapsed = performance.now() - startTime;
-        console.log(`[PBI Checker] Analysis completed in ${elapsed.toFixed(0)}ms`);
+        console.log(`[PBI Checker] Analysis completed in ${elapsed.toFixed(0)} ms`);
         console.log('[PBI Checker] Raw result:', result);
 
         // Parse JSON response
@@ -282,16 +314,25 @@ async function refinePrompt(originalPrompt, critique) {
     updateDashboardState('refining');
 
     try {
+        // Clear any pending input analysis
+        if (debounceTimer) clearTimeout(debounceTimer);
+
         // Create session in REFINE mode
         await createSession('refine');
 
         const refinementPrompt = `
-Critique to address: "${critique}"
+The user's original prompt scored low on: "${critique}" (e.g., Vague logic, Missing constraints).
 
-Original User Prompt:
+Target User Prompt:
 "${originalPrompt}"
 
-Rewrite this prompt to achieve a 100% PBI score. Output ONLY the refined prompt.
+    ** Task:** Rewrite the prompt above to specifically address the critique and achieve a 100 % PBI score.
+Ensure the new prompt has:
+1. Clear Role / Persona
+2. Explicit Constraints
+3. Defined Output Format
+
+Refine the prompt now.Text only.No JSON.
 `;
 
         console.log('[PBI Checker] Refining prompt...');
@@ -364,7 +405,7 @@ function parseJSONResponse(rawResponse) {
         let jsonStr = rawResponse.trim();
 
         // Remove markdown code blocks if present
-        const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        const jsonMatch = jsonStr.match(/```(?: json) ?\s * ([\s\S] *?)```/);
         if (jsonMatch) {
             jsonStr = jsonMatch[1].trim();
         }
@@ -409,10 +450,10 @@ function createDashboardWidget() {
     widget.id = 'pbi-dashboard-widget';
 
     widget.innerHTML = `
-    <div class="pbi-score-section">
+    < div class="pbi-score-section" >
       <span class="pbi-brain-icon">🧠</span>
       <span class="pbi-score-value">--</span>
-    </div>
+    </div >
     <div class="pbi-axis-breakdown">
       <div class="pbi-axis-row">
         <span class="pbi-axis-label">Logic</span>
@@ -440,13 +481,15 @@ function createDashboardWidget() {
       <span class="pbi-status-icon ready" style="display: none;">✓</span>
     </div>
     <div class="pbi-action-tooltip"></div>
-  `;
+`;
 
-    // Attach Refine listener
+    // Attach Refine listener (Use mousedown to prevent blur race condition)
     const refineBtn = widget.querySelector('.pbi-refine-btn');
     if (refineBtn) {
-        refineBtn.addEventListener('click', (e) => {
+        refineBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // Prevent input blur
             e.stopPropagation();
+
             const inputElement = document.querySelector(currentSiteConfig.inputSelector);
             const text = getInputText(inputElement);
             const critique = widget.querySelector('.pbi-critique-text').textContent;
@@ -619,7 +662,7 @@ function updateDashboardState(state, errorMessage = '') {
             statusIcon.style.display = 'inline';
             statusIcon.className = 'pbi-status-icon error';
             statusIcon.textContent = '✕';
-            critiqueText.textContent = `Error: ${errorMessage}`;
+            critiqueText.textContent = `Error: ${errorMessage} `;
             critiqueText.classList.add('short');
             break;
 
@@ -641,7 +684,7 @@ function updateDashboardWithResult(result) {
 
     // Update score
     const score = Math.round(result.total_score);
-    scoreValue.textContent = `${score}%`;
+    scoreValue.textContent = `${score}% `;
 
     // Set score color class
     scoreValue.className = 'pbi-score-value';
@@ -659,7 +702,7 @@ function updateDashboardWithResult(result) {
     if (result.axis_scores) {
         const axes = ['logic', 'completeness', 'constraints', 'erosion_risk'];
         axes.forEach(axis => {
-            const elem = dashboardWidget.querySelector(`[data-axis="${axis}"]`);
+            const elem = dashboardWidget.querySelector(`[data - axis="${axis}"]`);
             if (elem) {
                 const value = result.axis_scores[axis] || 0;
                 elem.textContent = `${value}/25`;
@@ -876,6 +919,56 @@ function setupMutationObserver() {
         childList: true,
         subtree: true
     });
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+}
+
+// NEW: Monitor URL changes to reset session when switching chats
+let lastUrl = window.location.href;
+
+function setupUrlMonitoring() {
+    console.log('[PBI Checker] Setting up URL monitoring...');
+
+    // 1. History API Patching
+    const pushState = history.pushState;
+    history.pushState = function () {
+        pushState.apply(history, arguments);
+        handleUrlChange();
+    };
+
+    const replaceState = history.replaceState;
+    history.replaceState = function () {
+        replaceState.apply(history, arguments);
+        handleUrlChange();
+    };
+
+    // 2. Popstate (Back/Forward)
+    window.addEventListener('popstate', handleUrlChange);
+
+    // 3. Periodic Check (Fallback)
+    setInterval(() => {
+        if (window.location.href !== lastUrl) {
+            handleUrlChange();
+        }
+    }, 1000);
+}
+
+function handleUrlChange() {
+    // Small delay to let title/URL settle
+    setTimeout(() => {
+        if (window.location.href !== lastUrl) {
+            console.log('[PBI Checker] URL changed, resetting dashboard...');
+            lastUrl = window.location.href;
+
+            // Reset dashboard state
+            resetDashboard();
+
+            // Re-detect site config in case domain logic changes (rare but possible)
+            currentSiteConfig = detectSite();
+        }
+    }, 100);
 }
 
 async function loadSettings() {
@@ -932,6 +1025,9 @@ async function initialize() {
 
     // Setup mutation observer for SPA
     setupMutationObserver();
+
+    // Setup URL monitoring for navigation
+    setupUrlMonitoring();
 
     console.log('[PBI Checker] Initialization complete!');
 }

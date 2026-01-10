@@ -24,12 +24,14 @@ Low scores mean your prompt is vague, "omakase" style, or delegates too much thi
 
 ## 🚀 Features
 
-- **Real-time Analysis**: Monitors your prompts as you type
-- **On-device AI**: Uses Chrome's built-in `LanguageModel` API (no external API calls)
-- **Dashboard Overlay**: Sleek glassmorphism UI injected directly into LLM interfaces
-- **Prompt Refinement**: One-click AI-powered prompt rewriting
+- **Real-time Analysis**: Monitors your prompts as you type with debounced AI evaluation
+- **On-device AI**: Uses Chrome's built-in `LanguageModel` API (no external API calls, privacy-first)
+- **Premium UI**: Toss-inspired glassmorphism design with 24px rounded corners and smooth animations
+- **Dashboard Overlay**: Seamlessly injected into LLM interfaces without breaking layouts
+- **Prompt Refinement**: One-click AI-powered prompt rewriting with context-aware improvements
 - **Send Blocker**: Optionally block sending low-score prompts (configurable threshold)
-- **Multi-site Support**: Works on ChatGPT, Claude, and Gemini
+- **Smart Persistence**: Survives SPA navigation and automatically resets after sending
+- **Multi-site Support**: Works on ChatGPT, Claude (with grid layout fix), and Gemini
 
 ---
 
@@ -84,21 +86,24 @@ Click the extension icon to open the popup:
 
 ```
 PBT/
-├── manifest.json      # Extension configuration (Manifest V3)
-├── background.js      # Service worker for settings & messaging
-├── content.js         # Main logic: AI analysis, dashboard injection
-├── popup.html         # Extension popup UI
-├── popup.js           # Popup interaction logic
-├── styles.css         # Dashboard styling (glassmorphism)
-└── icons/             # Extension icons
+├── manifest.json                    # Extension configuration (Manifest V3)
+├── background.js                    # Service worker for settings & messaging
+├── content.js                       # Main logic: AI analysis, dashboard injection
+├── popup.html                       # Extension popup UI
+├── popup.js                         # Popup interaction logic
+├── styles.css                       # Toss-inspired premium styling
+├── frontend-design-philosophy.md    # Design system guide for AI agents
+└── icons/                           # Extension icons
 ```
 
 ### Key Technical Details
 
-- **AI Integration**: Uses the global `LanguageModel` API with system prompts
-- **Session Management**: Reuses AI sessions for performance
-- **SPA Support**: MutationObserver handles dynamic page changes
+- **AI Integration**: Uses the global `LanguageModel` API with dual-mode sessions (analysis + refinement)
+- **Session Management**: Reuses AI sessions for performance, destroys on error for retry
+- **SPA Support**: MutationObserver + URL monitoring handles dynamic page changes and navigation
 - **Debouncing**: 1.5s delay before analysis to avoid excessive calls
+- **Design System**: Follows Toss-style philosophy (see `frontend-design-philosophy.md`)
+- **Claude Compatibility**: Special grid layout injection logic to prevent UI breaking
 
 ---
 
@@ -113,13 +118,24 @@ PBT/
 
 ---
 
+## 🎨 Design Philosophy
+
+This project follows a **Toss-inspired Korean Web App Design System**. See [`frontend-design-philosophy.md`](frontend-design-philosophy.md) for:
+
+- **Color System**: Deep Black (#101013), Toss Blue (#3182F6), semantic grays
+- **Glassmorphism**: `backdrop-blur-md`, subtle borders, premium shadows
+- **Typography**: Pretendard Variable with optimized letter spacing
+- **Animations**: Custom cubic-bezier easing (0.22, 1, 0.36, 1) for smooth transitions
+
+---
+
 ## 🗺️ Roadmap
 
 - [ ] Chrome Web Store publishing
-- [ ] More language support for critiques
-- [ ] Session history & analytics
+- [ ] Multi-language critique support (EN, KO, JA)
+- [ ] Session history & analytics dashboard
 - [ ] Custom scoring rubric configuration
-- [ ] Firefox/Edge support
+- [ ] Firefox/Edge support via WebExtensions API
 
 ---
 
