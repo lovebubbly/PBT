@@ -126,11 +126,47 @@ let settings = {
 let currentSession = null;
 let debounceTimer = null;
 let isAnalyzing = false;
-let isRefining = false; // NEW: Prevent double refine
-let lastAnalyzedText = ''; // NEW: Track last analyzed text
+let isRefining = false;
+let lastAnalyzedText = '';
+let lastAnalysisResult = null; // NEW: Store last analysis result for adaptive refinement
 let dashboardWidget = null;
 let currentSiteConfig = null;
 let observer = null;
+
+// NEW: Adaptive Refinement Strategies (Dynamic Prompt Injection)
+const REFINE_STRATEGIES = {
+    logic: {
+        threshold: 18,
+        instruction: `> **🔧 Logic Reinforcement Protocol**:
+The user's request lacks causal reasoning. You MUST:
+1. Explicitly define the 'Objective' and 'Key Results'.
+2. Use a 'Chain of Thought' structure (Step 1 -> Step 2 -> Outcome).
+3. Remove vague terms like "appropriately" or "good".`
+    },
+    completeness: {
+        threshold: 18,
+        instruction: `> **🔧 Completeness Protocol**:
+The user's specifications are missing. You MUST:
+1. Define the specific 'Output Format' (e.g., Markdown Table, JSON, Python Script).
+2. Add a 'Table of Contents' or 'Structure' section.
+3. Fill in missing details with professional assumptions (and state them).`
+    },
+    constraints: {
+        threshold: 18,
+        instruction: `> **🔧 Safety & Constraints Protocol**:
+The user provided no guardrails. You MUST:
+1. Add a '## Constraints' section.
+2. Include at least 3 negative constraints (e.g., "Do not use flowery language", "No moralizing").
+3. Set the Tone & Manner explicitly.`
+    },
+    erosion_risk: {
+        threshold: 15,
+        instruction: `> **🚨 Cognitive Agency Protocol**:
+The user is trying to outsource critical thinking (High Brainrot Risk).
+- DO NOT write the final essay/code directly if it replaces the user's judgment.
+- INSTEAD, rewrite the prompt to ask for a "Framework," "Drafting Guide," or "Review Criteria" so the user stays in the loop.`
+    }
+};
 
 // ========================================
 // AI Integration
@@ -165,7 +201,7 @@ async function checkAIAvailability() {
 
 
 
-async function createSession(mode = 'analysis') {
+async function createSession(mode = 'analysis', customSystemPrompt = null) {
     try {
         // ALWAYS create fresh session to prevent context pollution
         if (currentSession) {
@@ -197,13 +233,19 @@ async function createSession(mode = 'analysis') {
         };
 
         // Select System Prompt based on Mode
-        if (mode === 'analysis') {
+        if (customSystemPrompt) {
+            // Custom system prompt takes precedence (for adaptive refinement)
+            options.initialPrompts = [
+                { role: 'system', content: customSystemPrompt }
+            ];
+        } else if (mode === 'analysis') {
             options.initialPrompts = [
                 { role: 'system', content: PBI_SYSTEM_PROMPT }
             ];
             // Hint for JSON if supported
             options.expectedOutputs[0].json = true;
         } else if (mode === 'refine') {
+            // Fallback for generic refine (shouldn't normally reach here with adaptive logic)
             options.initialPrompts = [
                 {
                     role: 'system',
@@ -244,7 +286,7 @@ async function createSession(mode = 'analysis') {
 
 
 async function analyzePBI(userPrompt) {
-    if (isAnalyzing) {
+    if (isAnalyzing || isRefining) {
         console.log('[PBI Checker] Analysis already in progress, skipping...');
         return null;
     }
@@ -276,6 +318,7 @@ User Prompt:
         const parsed = parseJSONResponse(result);
 
         if (parsed) {
+            lastAnalysisResult = parsed; // Store result for adaptive refinement
             updateDashboardWithResult(parsed);
             return parsed;
         } else {
@@ -317,22 +360,49 @@ async function refinePrompt(originalPrompt, critique) {
         // Clear any pending input analysis
         if (debounceTimer) clearTimeout(debounceTimer);
 
-        // Create session in REFINE mode
-        await createSession('refine');
+        // === ADAPTIVE LOGIC: Build dynamic system prompt based on axis scores ===
+        let dynamicInstructions = [];
+
+        if (lastAnalysisResult && lastAnalysisResult.axis_scores) {
+            const scores = lastAnalysisResult.axis_scores;
+
+            // Inject specific strategies for weak axes
+            Object.keys(REFINE_STRATEGIES).forEach(axis => {
+                const strategy = REFINE_STRATEGIES[axis];
+                if (scores[axis] < strategy.threshold) {
+                    dynamicInstructions.push(strategy.instruction);
+                    console.log(`[PBI Checker] Injecting strategy for weak axis: ${axis} (${scores[axis]}/${strategy.threshold})`);
+                }
+            });
+        }
+
+        // Fallback if no weak axes detected (just polish)
+        if (dynamicInstructions.length === 0) {
+            dynamicInstructions.push("> **Optimization**: Polish the prompt for maximum clarity and conciseness.");
+        }
+
+        // Build the dynamic system prompt
+        const SYSTEM_PROMPT_DYNAMIC = `
+You are a "Strict Logic Architect" & "Prompt Engineering Expert".
+Your goal is to rewrite the user's VAGUE prompt into a PERFECT ENGINEERING SPECIFICATION (PBI 100/100).
+
+### ⚡ Critical Instructions (Applied based on analysis)
+${dynamicInstructions.join('\n\n')}
+
+### 📝 General Rules
+- **Preserve Intent**: Do not change what the user wants to do, only HOW they ask for it.
+- **Language**: Keep the result in the **same language** as the user's original prompt (Korean -> Korean, English -> English).
+- **Output**: Output **ONLY** the refined prompt text. No explanations, no markdown code blocks around the text.
+`;
+
+        // Create session with dynamic system prompt
+        await createSession('refine', SYSTEM_PROMPT_DYNAMIC);
 
         const refinementPrompt = `
-The user's original prompt scored low on: "${critique}" (e.g., Vague logic, Missing constraints).
-
-Target User Prompt:
+Original User Prompt:
 "${originalPrompt}"
 
-    ** Task:** Rewrite the prompt above to specifically address the critique and achieve a 100 % PBI score.
-Ensure the new prompt has:
-1. Clear Role / Persona
-2. Explicit Constraints
-3. Defined Output Format
-
-Refine the prompt now.Text only.No JSON.
+Refine this now.
 `;
 
         console.log('[PBI Checker] Refining prompt...');
@@ -450,10 +520,10 @@ function createDashboardWidget() {
     widget.id = 'pbi-dashboard-widget';
 
     widget.innerHTML = `
-    < div class="pbi-score-section" >
+    <div class="pbi-score-section">
       <span class="pbi-brain-icon">🧠</span>
       <span class="pbi-score-value">--</span>
-    </div >
+    </div>
     <div class="pbi-axis-breakdown">
       <div class="pbi-axis-row">
         <span class="pbi-axis-label">Logic</span>
@@ -564,7 +634,7 @@ function injectDashboard() {
 
                 // Force spacing and layout
                 dashboardWidget.style.position = 'relative';
-                dashboardWidget.style.display = 'flex';
+                // dashboardWidget.style.display = 'flex'; // Removed to let CSS control visibility
                 dashboardWidget.style.marginBottom = '12px';
                 dashboardWidget.style.width = '100%';
                 dashboardWidget.style.maxWidth = '100%';
@@ -702,7 +772,7 @@ function updateDashboardWithResult(result) {
     if (result.axis_scores) {
         const axes = ['logic', 'completeness', 'constraints', 'erosion_risk'];
         axes.forEach(axis => {
-            const elem = dashboardWidget.querySelector(`[data - axis="${axis}"]`);
+            const elem = dashboardWidget.querySelector(`[data-axis="${axis}"]`);
             if (elem) {
                 const value = result.axis_scores[axis] || 0;
                 elem.textContent = `${value}/25`;

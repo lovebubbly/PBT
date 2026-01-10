@@ -44,7 +44,7 @@
   margin: 12px auto;
   padding: 14px 20px;
 
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -68,7 +68,7 @@
     box-shadow 0.3s ease;
 
   z-index: 9999;
-  visibility: hidden;
+  /* visibility: hidden; Removed to fix layout space issue */
   pointer-events: none;
 }
 
@@ -91,6 +91,7 @@
 }
 
 #pbi-dashboard-widget.visible {
+  display: flex;
   opacity: 1;
   transform: translateY(0) scale(1);
   visibility: visible;
