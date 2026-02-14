@@ -1,1104 +1,1093 @@
 /**
- * PBI Checker - Content Script
- * Main logic for PBI analysis and dashboard injection
+ * PBI Checker - Content Script (Facelift)
+ * Rebuilt for stable runtime lifecycle and better UX flow.
  */
 
-console.log('[PBI Checker] 🧠 Initializing Brainrot Protocol...');
-
-// ========================================
-// Configuration
-// ========================================
-
 const PBI_SYSTEM_PROMPT = `
-You are PBI Checker. Score the user's prompt 0-100.
+You are PBI Checker.
+Evaluate one user prompt and output strict JSON only.
 
-Axes (25 pts each):
-- logic: Clear goal & causality
-- completeness: Output format specified
-- constraints: Tone/rules defined
-- erosion_risk: User stays in the loop (not outsourcing thinking)
+Scoring rubric (0-25 each):
+- logic: clear objective, reasoning flow, context
+- completeness: output format, depth, acceptance criteria
+- constraints: boundaries, prohibited behavior, tone/rules
+- erosion_risk: keeps user in the loop vs delegating all thinking
 
-Output JSON only:
-{"total_score":<0-100>,"axis_scores":{"logic":<0-25>,"completeness":<0-25>,"constraints":<0-25>,"erosion_risk":<0-25>},"action_item":"<specific fix instruction>"}
+Output schema:
+{"total_score":0-100,"axis_scores":{"logic":0-25,"completeness":0-25,"constraints":0-25,"erosion_risk":0-25},"action_item":"one concrete next fix"}
 `;
 
-const REFINE_SYSTEM_PROMPT = `
-You are a "Strict Logic Architect".Your goal is to rewrite vague user prompts into high - precision engineering specifications(PBI Score 100 %).
-
-### ⚡ Transformation Protocols
-1. ** Context Injection **: If the user lacks context, infer the most logical scenario(e.g., "coding" -> "senior software engineer context").
-2. ** Format Enforcement **: Always specify the output format(Markdown table, JSON, Code block, etc.).
-3. ** Anti - Hallucination **: Add constraints like "Do not invent facts," "If unsure, ask for clarification," "No preambles/filler."
-4. ** Erosion Prevention **: Instead of asking the AI to "think for me," ask the AI to "provide a framework" or "critique my logic."
-
-### 📝 Few - Shot Examples(Follow this structure)
-
-    ** Input:** "Write a blog post about AI."
-        ** Refined:**
-            "Act as a Senior Tech Journalist. Write a 1,500-word analytical blog post about 'The Impact of LLMs on Junior Developers'.
-            [Structure]: Introduction(Market Data) -> Core Arguments(3 points) -> Counter - arguments -> Conclusion.
-[Tone]: Professional, Insightful, No hype / buzzwords.
-[Format]: Markdown with H2 / H3 headers.
-[Constraint]: Focus on technical accuracy over engagement metrics."
-
-    ** Input:** "Fix this code."
-        ** Refined:**
-            "Act as a Senior Python Developer. Review the attached code snippet for: 1. Time Complexity (Big O), 2. Memory Leaks, 3. PEP8 Compliance.
-            [Constraint]: Do not rewrite the whole code; only provide the optimized diffs and a short explanation for each change.
-[Output]: Logic explanation followed by the code block."
-
-### 🚨 Final Instructions
-    - REMOVE all emotional language(e.g., "please," "I'm desperate").
-- Output ** ONLY ** the refined prompt text.Do not add "Here is the refined version".
-`;
 const SITE_CONFIGS = {
-    'chatgpt.com': {
-        inputSelector: '#prompt-textarea, [data-testid="composer-background"] textarea',
-        wrapperSelector: 'form, [data-testid="composer-background"]',
-        sendButtonSelector: 'button[data-testid="send-button"], button[data-testid="fruitjuice-send-button"]'
-    },
-    'chat.openai.com': {
-        inputSelector: '#prompt-textarea',
-        wrapperSelector: 'form',
-        sendButtonSelector: 'button[data-testid="send-button"]'
-    },
-    'claude.ai': {
-        // Claude uses contenteditable ProseMirror div
-        inputSelector: 'div[contenteditable="true"], .ProseMirror[contenteditable="true"]',
-        // Try multiple wrapper options - Claude's structure changes
-        wrapperSelector: 'fieldset, form, [class*="composer"], [class*="input-container"], [class*="chat-input"]',
-        sendButtonSelector: 'button[aria-label="Send Message"], button[aria-label*="Send"], button[type="submit"]'
-    },
-    'gemini.google.com': {
-        inputSelector: '.ql-editor, rich-textarea .ql-editor, [contenteditable="true"]',
-        wrapperSelector: '.input-area-container, .input-wrapper, .text-input-field_textarea-wrapper',
-        sendButtonSelector: 'button[aria-label*="Send"], .send-button'
-    }
+  'chatgpt.com': {
+    label: 'ChatGPT',
+    inputSelector: '#prompt-textarea, [data-testid="composer-background"] textarea',
+    wrapperSelector: 'form, [data-testid="composer-background"]',
+    sendButtonSelector: 'button[data-testid="send-button"], button[data-testid="fruitjuice-send-button"]'
+  },
+  'chat.openai.com': {
+    label: 'ChatGPT',
+    inputSelector: '#prompt-textarea, [data-testid="composer-background"] textarea',
+    wrapperSelector: 'form, [data-testid="composer-background"]',
+    sendButtonSelector: 'button[data-testid="send-button"]'
+  },
+  'claude.ai': {
+    label: 'Claude',
+    inputSelector: 'div[contenteditable="true"], .ProseMirror[contenteditable="true"]',
+    wrapperSelector: '[data-testid="chat-input-grid-container"], fieldset, form, [class*="composer"], [class*="chat-input"]',
+    sendButtonSelector: 'button[aria-label="Send Message"], button[aria-label*="Send"], button[type="submit"]'
+  },
+  'gemini.google.com': {
+    label: 'Gemini',
+    inputSelector: '.ql-editor, rich-textarea .ql-editor, [contenteditable="true"]',
+    wrapperSelector: '.input-area-container, .input-wrapper, .text-input-field_textarea-wrapper',
+    sendButtonSelector: 'button[aria-label*="Send"], .send-button'
+  }
 };
 
-const DEBOUNCE_DELAY = 1500;
-const MIN_TEXT_LENGTH = 20;
-const MIN_VISIBILITY_LENGTH = 10;
+const AXIS_CONFIG = {
+  logic: { label: 'Logic', threshold: 18, fix: 'Define objective, context, and step order.' },
+  completeness: { label: 'Completeness', threshold: 18, fix: 'Specify output format, sections, and quality bar.' },
+  constraints: { label: 'Constraints', threshold: 18, fix: 'Add hard rules and explicit limitations.' },
+  erosion_risk: { label: 'Erosion Risk', threshold: 15, fix: 'Ask for framework/critique, not full delegation.' }
+};
 
-// ========================================
-// State
-// ========================================
+const AXIS_KEYS = Object.keys(AXIS_CONFIG);
 
-let settings = {
+const DEBOUNCE_DELAY_MS = 1400;
+const MIN_ANALYZE_LENGTH = 18;
+const MIN_SHOW_LENGTH = 8;
+const SESSION_MAX_USES = 24;
+const MIN_REANALYZE_DELTA = 14;
+const AI_AVAILABILITY_CACHE_MS = 120000;
+
+const state = {
+  initialized: false,
+  settings: {
     enabled: true,
+    autoAnalyze: true,
     blockLowScore: false,
     blockThreshold: 30,
     debugMode: false
+  },
+  siteConfig: null,
+  aiAvailability: 'checking',
+  widget: null,
+  ui: null,
+  expanded: false,
+  mode: 'idle',
+  activeInput: null,
+  activeSendButton: null,
+  cleanupInputBindings: [],
+  observer: null,
+  observerTicking: false,
+  lastUrl: window.location.href,
+  urlIntervalId: null,
+  postSendTimer: null,
+  debounceTimer: null,
+  guardMessageTimer: null,
+  isAnalyzing: false,
+  isRefining: false,
+  analyzeCallId: 0,
+  lastAnalyzedText: '',
+  lastResult: null,
+  analysisSession: null,
+  analysisSessionUses: 0,
+  lastAvailabilityCheckAt: 0
 };
 
-let currentSession = null;
-let debounceTimer = null;
-let isAnalyzing = false;
-let isRefining = false;
-let lastAnalyzedText = '';
-let lastAnalysisResult = null;
-let lastRefineTime = 0; // Cooldown: skip analysis for 2s after refine
-let dashboardWidget = null;
-let currentSiteConfig = null;
-let observer = null;
-
-// Adaptive Refinement Strategies (Simplified for Speed)
-const REFINE_STRATEGIES = {
-    logic: {
-        threshold: 18,
-        instruction: `Add clear Objective and Step-by-Step structure.`
-    },
-    completeness: {
-        threshold: 18,
-        instruction: `Specify Output Format (Markdown/JSON/Code) and Structure.`
-    },
-    constraints: {
-        threshold: 18,
-        instruction: `Add Constraints section with 3 negative rules and Tone.`
-    },
-    erosion_risk: {
-        threshold: 15,
-        instruction: `Request a Framework/Guide instead of final output.`
-    }
-};
-
-// ========================================
-// AI Integration
-// ========================================
-
-async function checkAIAvailability() {
-    try {
-        // Use the global LanguageModel API (not window.ai)
-        if (typeof LanguageModel === 'undefined') {
-            console.warn('[PBI Checker] LanguageModel API not available');
-            return 'unavailable';
-        }
-
-        // Pass the same options to availability() that we use in create()
-        // Per Chrome docs: "Always pass the same options to the availability() function"
-        // Supported languages: ['en', 'es', 'ja'] only - Korean is NOT supported!
-        const availability = await LanguageModel.availability({
-            expectedInputs: [
-                { type: 'text', languages: ['en'] }
-            ],
-            expectedOutputs: [
-                { type: 'text', languages: ['en'] }
-            ]
-        });
-        console.log('[PBI Checker] AI Availability:', availability);
-        return availability; // 'unavailable', 'downloadable', 'downloading', 'available'
-    } catch (err) {
-        console.error('[PBI Checker] Error checking AI availability:', err);
-        return 'unavailable';
-    }
+function log(...args) {
+  if (state.settings.debugMode) {
+    console.log('[PBI Checker]', ...args);
+  }
 }
 
-
-
-async function createSession(mode = 'analysis', customSystemPrompt = null) {
-    try {
-        // ALWAYS create fresh session to prevent context pollution
-        if (currentSession) {
-            try { currentSession.destroy(); } catch (e) { }
-            currentSession = null;
-        }
-
-        const availability = await checkAIAvailability();
-
-        if (availability === 'unavailable') {
-            throw new Error('On-device AI not available. Please enable Chrome flags.');
-        }
-
-        // Wait for download if needed
-        if (availability === 'downloadable' || availability === 'after-download') {
-            console.log('[PBI Checker] Model needs download...');
-            updateDashboardState('downloading');
-        }
-
-        const options = {
-            temperature: 0.7,
-            topK: 40,
-            expectedInputs: [
-                { type: 'text', languages: ['en'] }
-            ],
-            expectedOutputs: [
-                { type: 'text', languages: ['en'] }
-            ]
-        };
-
-        // Select System Prompt based on Mode
-        if (customSystemPrompt) {
-            // Custom system prompt takes precedence (for adaptive refinement)
-            options.initialPrompts = [
-                { role: 'system', content: customSystemPrompt }
-            ];
-        } else if (mode === 'analysis') {
-            options.initialPrompts = [
-                { role: 'system', content: PBI_SYSTEM_PROMPT }
-            ];
-            // Hint for JSON if supported
-            options.expectedOutputs[0].json = true;
-        } else if (mode === 'refine') {
-            // Fallback for generic refine (shouldn't normally reach here with adaptive logic)
-            options.initialPrompts = [
-                {
-                    role: 'system',
-                    content: REFINE_SYSTEM_PROMPT
-                }
-            ];
-        }
-
-        console.log(`[PBI Checker] Creating new session(Mode: ${mode})...`);
-
-        currentSession = await LanguageModel.create(options);
-
-        // Add progress monitor if supported
-        if (currentSession.addEventListener) {
-            currentSession.addEventListener('downloadprogress', (e) => {
-                const progress = (e.loaded / e.total) * 100;
-                console.log(`[PBI Checker] Model loading / download: ${progress.toFixed(1)}% `);
-
-                // Only show "Downloading" in UI if it's NOT available yet (true download)
-                // If it is 'available', it's just loading into memory
-                if (availability === 'available') {
-                    updateDashboardState('downloading', `Loading AI...`);
-                } else {
-                    updateDashboardState('downloading', `Downloading model: ${Math.round(progress)}% `);
-                }
-            });
-        }
-
-        // Wait for ready
-        console.log('[PBI Checker] Session created successfully');
-        return currentSession;
-    } catch (err) {
-        console.error('[PBI Checker] Session creation failed:', err);
-        updateDashboardState('error', 'AI Model Error: ' + err.message);
-        throw err;
-    }
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
+function normalizeText(text) {
+  return (text || '').replace(/\s+/g, ' ').trim();
+}
 
-async function analyzePBI(userPrompt) {
-    if (isAnalyzing || isRefining) {
-        console.log('[PBI Checker] Analysis already in progress, skipping...');
-        return null;
+function isSignificantChange(nextText, previousText) {
+  const next = normalizeText(nextText);
+  const prev = normalizeText(previousText);
+  if (!prev) return true;
+  if (next === prev) return false;
+
+  const lengthDelta = Math.abs(next.length - prev.length);
+  if (lengthDelta >= MIN_REANALYZE_DELTA) return true;
+
+  // Typing a few more characters at the end should not retrigger immediately.
+  if (next.startsWith(prev) || prev.startsWith(next)) {
+    return false;
+  }
+
+  return true;
+}
+
+function toUserErrorMessage(err, context = 'analysis') {
+  const raw = String(err?.message || '').toLowerCase();
+  if (raw.includes('on-device ai') || raw.includes('languagemodel')) {
+    return '온디바이스 AI를 사용할 수 없습니다. Chrome AI 설정을 확인해주세요.';
+  }
+  if (raw.includes('empty output')) {
+    return '개선 결과가 비어 있습니다. 다시 시도해주세요.';
+  }
+  if (raw.includes('failed to parse') || raw.includes('json')) {
+    return '분석 응답 파싱에 실패했습니다. 다시 시도해주세요.';
+  }
+  return context === 'refine'
+    ? '프롬프트 개선 중 오류가 발생했습니다.'
+    : '프롬프트 분석 중 오류가 발생했습니다.';
+}
+
+function safeDestroySession(session) {
+  if (!session) return;
+  try {
+    session.destroy();
+  } catch (err) {
+    log('Session destroy skipped:', err);
+  }
+}
+
+function getVisibleElement(selector) {
+  const elements = Array.from(document.querySelectorAll(selector));
+  if (elements.length === 0) return null;
+
+  const visible = elements.find((el) => {
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+  });
+
+  return visible || elements[0] || null;
+}
+
+function detectSiteConfig() {
+  const hostname = window.location.hostname;
+  for (const [domain, config] of Object.entries(SITE_CONFIGS)) {
+    if (hostname.includes(domain.replace('www.', ''))) {
+      return config;
     }
+  }
+  return null;
+}
 
-    // Cooldown: skip analysis for 2 seconds after Refine
-    if (Date.now() - lastRefineTime < 2000) {
-        console.log('[PBI Checker] Cooldown active, skipping analysis...');
-        return null;
-    }
+function getInputText(inputElement) {
+  if (!inputElement) return '';
 
-    isAnalyzing = true;
-    updateDashboardState('analyzing');
+  if (inputElement.contentEditable === 'true') {
+    return inputElement.innerText || inputElement.textContent || '';
+  }
 
+  return inputElement.value || '';
+}
+
+function setInputText(inputElement, text) {
+  if (!inputElement) return;
+
+  if (inputElement.contentEditable === 'true') {
+    inputElement.innerText = text;
+  } else {
+    inputElement.value = text;
+  }
+
+  inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+  inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function loadSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['enabled', 'autoAnalyze', 'blockLowScore', 'blockThreshold', 'debugMode'], (result) => {
+      state.settings = {
+        ...state.settings,
+        ...result
+      };
+      resolve(state.settings);
+    });
+  });
+}
+
+async function checkAIAvailability(forceRefresh = false) {
+  if (typeof LanguageModel === 'undefined') {
+    state.aiAvailability = 'unavailable';
+    state.lastAvailabilityCheckAt = Date.now();
+    return state.aiAvailability;
+  }
+
+  const now = Date.now();
+  if (!forceRefresh && state.aiAvailability !== 'checking' && (now - state.lastAvailabilityCheckAt) < AI_AVAILABILITY_CACHE_MS) {
+    return state.aiAvailability;
+  }
+
+  try {
+    const options = {
+      expectedInputs: [{ type: 'text' }],
+      expectedOutputs: [{ type: 'text' }]
+    };
+    const availability = await LanguageModel.availability(options);
+    state.aiAvailability = availability;
+    state.lastAvailabilityCheckAt = now;
+    return availability;
+  } catch (err) {
     try {
-        // Create session in ANALYSIS mode
-        await createSession('analysis');
+      const fallbackAvailability = await LanguageModel.availability();
+      state.aiAvailability = fallbackAvailability;
+      state.lastAvailabilityCheckAt = now;
+      return fallbackAvailability;
+    } catch (fallbackErr) {
+      log('AI availability check failed:', err, fallbackErr);
+      state.aiAvailability = 'unavailable';
+      state.lastAvailabilityCheckAt = now;
+      return 'unavailable';
+    }
+  }
+}
 
-        const promptText = `
-Now, evaluate the following user prompt based on the rubric above.
+async function ensureAIReady() {
+  let availability = await checkAIAvailability(false);
+  if (availability === 'unavailable') {
+    availability = await checkAIAvailability(true);
+  }
+  if (availability === 'unavailable') {
+    throw new Error('On-device AI unavailable. Enable Chrome on-device model flags.');
+  }
+  return availability;
+}
 
-User Prompt:
-"${userPrompt}"
+async function createSession({ mode = 'analysis', systemPrompt }) {
+  if (typeof LanguageModel === 'undefined') {
+    throw new Error('LanguageModel API is not available.');
+  }
+
+  const options = {
+    temperature: mode === 'analysis' ? 0.2 : 0.7,
+    topK: mode === 'analysis' ? 20 : 40,
+    expectedInputs: [{ type: 'text' }],
+    expectedOutputs: [{ type: 'text' }],
+    initialPrompts: [{ role: 'system', content: systemPrompt }]
+  };
+
+  return LanguageModel.create(options);
+}
+
+async function getAnalysisSession() {
+  if (state.analysisSession && state.analysisSessionUses < SESSION_MAX_USES) {
+    return state.analysisSession;
+  }
+
+  safeDestroySession(state.analysisSession);
+  state.analysisSession = await createSession({
+    mode: 'analysis',
+    systemPrompt: PBI_SYSTEM_PROMPT
+  });
+  state.analysisSessionUses = 0;
+  return state.analysisSession;
+}
+
+function destroyAllSessions() {
+  safeDestroySession(state.analysisSession);
+  state.analysisSession = null;
+  state.analysisSessionUses = 0;
+}
+
+function extractJsonText(rawText) {
+  const text = (rawText || '').trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced && fenced[1]) {
+    return fenced[1].trim();
+  }
+
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return text.slice(firstBrace, lastBrace + 1);
+  }
+
+  return text;
+}
+
+function parseAnalysisResponse(rawText) {
+  const jsonText = extractJsonText(rawText);
+  const parsed = JSON.parse(jsonText);
+
+  const axisScores = parsed.axis_scores || {};
+  const normalizedAxis = {
+    logic: clamp(Number(axisScores.logic) || 0, 0, 25),
+    completeness: clamp(Number(axisScores.completeness) || 0, 0, 25),
+    constraints: clamp(Number(axisScores.constraints) || 0, 0, 25),
+    erosion_risk: clamp(Number(axisScores.erosion_risk) || 0, 0, 25)
+  };
+
+  let totalScore = Number(parsed.total_score);
+  if (!Number.isFinite(totalScore)) {
+    totalScore = AXIS_KEYS.reduce((sum, key) => sum + normalizedAxis[key], 0);
+  }
+  totalScore = clamp(Math.round(totalScore), 0, 100);
+
+  let actionItem = normalizeText(parsed.action_item || '');
+  if (!actionItem) {
+    const weakAxis = AXIS_KEYS.find((key) => normalizedAxis[key] < AXIS_CONFIG[key].threshold);
+    actionItem = weakAxis ? AXIS_CONFIG[weakAxis].fix : 'Prompt is strong. You can ship this.';
+  }
+
+  return {
+    total_score: totalScore,
+    axis_scores: normalizedAxis,
+    action_item: actionItem
+  };
+}
+
+function buildRefineSystemPrompt(result) {
+  const strategyLines = [];
+
+  if (result && result.axis_scores) {
+    for (const key of AXIS_KEYS) {
+      const score = Number(result.axis_scores[key]) || 0;
+      if (score < AXIS_CONFIG[key].threshold) {
+        strategyLines.push(`- ${AXIS_CONFIG[key].fix}`);
+      }
+    }
+  }
+
+  if (strategyLines.length === 0) {
+    strategyLines.push('- Tighten clarity, remove ambiguity, and define final deliverable format.');
+  }
+
+  return `
+You are a strict prompt editor.
+Rewrite the user's prompt into a high-clarity execution brief while preserving intent.
+
+Mandatory improvements:
+${strategyLines.join('\n')}
+
+Rules:
+- Keep the same language as the user prompt.
+- Output only the refined prompt text.
+- No preamble, no markdown fences, no apology.
+`;
+}
+
+function scoreBand(score) {
+  if (score < 30) return 'critical';
+  if (score < 60) return 'warn';
+  if (score < 80) return 'good';
+  return 'great';
+}
+
+function setWidgetVisibility(visible) {
+  if (!state.widget) return;
+  state.widget.classList.toggle('visible', visible);
+}
+
+function updateVisibilityByInput() {
+  if (!state.settings.enabled) {
+    setWidgetVisibility(false);
+    return;
+  }
+
+  const text = getInputText(state.activeInput);
+  setWidgetVisibility(text.trim().length >= MIN_SHOW_LENGTH);
+}
+
+function renderMode(mode, message = '') {
+  if (!state.widget || !state.ui) return;
+
+  state.mode = mode;
+  state.widget.dataset.mode = mode;
+
+  const { statusText, statusDot, headline, refineButton } = state.ui;
+
+  switch (mode) {
+    case 'analyzing':
+      statusText.textContent = '프롬프트 분석 중';
+      statusDot.dataset.tone = 'busy';
+      headline.textContent = '목표, 형식, 제약조건을 스캔하는 중';
+      break;
+    case 'refining':
+      statusText.textContent = '프롬프트 개선 중';
+      statusDot.dataset.tone = 'busy';
+      headline.textContent = '약한 축을 기준으로 자동 보정 중';
+      break;
+    case 'ready':
+      statusText.textContent = message || '분석 완료';
+      statusDot.dataset.tone = 'ok';
+      break;
+    case 'error':
+      statusText.textContent = message || '오류';
+      statusDot.dataset.tone = 'error';
+      if (message) headline.textContent = message;
+      break;
+    default:
+      statusText.textContent = '프롬프트 입력 대기 중';
+      statusDot.dataset.tone = 'idle';
+      headline.textContent = '입력하면 즉시 프롬프트 구조를 진단합니다';
+      break;
+  }
+
+  if (refineButton) {
+    refineButton.disabled = mode === 'analyzing' || mode === 'refining' || !state.lastResult;
+  }
+}
+
+function renderIdle() {
+  if (!state.widget || !state.ui) return;
+
+  state.lastResult = null;
+  state.lastAnalyzedText = '';
+
+  state.widget.dataset.scoreBand = 'none';
+  state.widget.style.setProperty('--pbi-score-angle', '0deg');
+
+  state.ui.scoreText.textContent = '--';
+  state.ui.kicker.textContent = 'PBI SCORE';
+  state.ui.actionText.textContent = '목표, 출력형식, 제약조건 3가지를 명시하면 점수가 빠르게 올라갑니다.';
+  if (!state.settings.enabled) {
+    state.ui.metaText.textContent = '비활성화됨';
+  } else {
+    state.ui.metaText.textContent = state.settings.autoAnalyze ? '자동 분석(변화 클 때만)' : '수동 분석 모드';
+  }
+
+  for (const key of AXIS_KEYS) {
+    const valueEl = state.ui.axisValues[key];
+    const barEl = state.ui.axisBars[key];
+    if (valueEl) valueEl.textContent = '--/25';
+    if (barEl) barEl.style.width = '0%';
+  }
+
+  renderMode('idle');
+}
+
+function renderResult(result, source = 'auto') {
+  if (!state.widget || !state.ui) return;
+
+  const score = clamp(Math.round(result.total_score), 0, 100);
+  const band = scoreBand(score);
+  const readyHeadline = score < 40
+    ? '핵심 구조가 약합니다. 지금 고치면 품질이 크게 오릅니다'
+    : score < 70
+      ? '좋은 초안입니다. 제약/형식을 조금만 더 구체화해보세요'
+      : '전송 가능한 품질입니다. 필요하면 한 번 더 개선하세요';
+
+  state.widget.dataset.scoreBand = band;
+  state.widget.style.setProperty('--pbi-score-angle', `${score * 3.6}deg`);
+
+  state.ui.scoreText.textContent = `${score}%`;
+  state.ui.kicker.textContent = score < 40 ? 'REWRITE NOW' : score < 70 ? 'NEEDS TUNING' : 'SHIP READY';
+  state.ui.headline.textContent = readyHeadline;
+  state.ui.actionText.textContent = result.action_item;
+  state.ui.metaText.textContent = source === 'manual' ? '수동 분석' : source === 'refine' ? '개선 후 재분석' : '자동 분석';
+
+  for (const key of AXIS_KEYS) {
+    const axisValue = clamp(Number(result.axis_scores[key]) || 0, 0, 25);
+    const valueEl = state.ui.axisValues[key];
+    const barEl = state.ui.axisBars[key];
+    if (valueEl) valueEl.textContent = `${axisValue}/25`;
+    if (barEl) barEl.style.width = `${axisValue * 4}%`;
+  }
+
+  renderMode('ready', score < state.settings.blockThreshold && state.settings.blockLowScore
+    ? `점수 ${score}점: 차단 기준(${state.settings.blockThreshold}) 미만`
+    : `분석 완료 · ${score}점`);
+
+  updateGuardVisual();
+}
+
+function updateGuardVisual() {
+  if (!state.widget || !state.ui) return;
+
+  const shouldWarn = shouldBlockSend();
+  state.widget.classList.toggle('guard-active', shouldWarn);
+
+  if (shouldWarn) {
+    state.ui.guardMessage.textContent = `전송 차단: 점수가 ${state.settings.blockThreshold}점 미만입니다. '개선' 버튼으로 보정해보세요.`;
+  } else {
+    state.ui.guardMessage.textContent = '';
+  }
+}
+
+function showGuardMessage(message) {
+  if (!state.ui) return;
+
+  state.ui.guardMessage.textContent = message;
+  state.widget.classList.add('guard-flash');
+
+  if (state.guardMessageTimer) {
+    clearTimeout(state.guardMessageTimer);
+  }
+
+  state.guardMessageTimer = setTimeout(() => {
+    state.widget.classList.remove('guard-flash');
+    updateGuardVisual();
+  }, 1700);
+}
+
+function getAxisMarkup() {
+  return AXIS_KEYS.map((key) => {
+    const label = AXIS_CONFIG[key].label;
+    return `
+      <div class="pbi-axis-card" data-axis-row="${key}">
+        <span class="pbi-axis-label">${label}</span>
+        <span class="pbi-axis-value" data-axis-value="${key}">--/25</span>
+        <div class="pbi-axis-meter">
+          <span class="pbi-axis-fill" data-axis-fill="${key}"></span>
+        </div>
+      </div>
     `;
-
-        console.log('[PBI Checker] Sending prompt for analysis...');
-        const startTime = performance.now();
-
-        const result = await currentSession.prompt(promptText);
-
-        const elapsed = performance.now() - startTime;
-        console.log(`[PBI Checker] Analysis completed in ${elapsed.toFixed(0)} ms`);
-        console.log('[PBI Checker] Raw result:', result);
-
-        // Parse JSON response
-        const parsed = parseJSONResponse(result);
-
-        if (parsed) {
-            lastAnalysisResult = parsed; // Store result for adaptive refinement
-            updateDashboardWithResult(parsed);
-            return parsed;
-        } else {
-            throw new Error('Failed to parse AI response');
-        }
-
-    } catch (err) {
-        console.error('[PBI Checker] Analysis error:', err);
-        updateDashboardState('error', err.message);
-
-        // Destroy session on error to allow retry
-        if (currentSession) {
-            currentSession.destroy();
-            currentSession = null;
-        }
-
-        return null;
-    } finally {
-        isAnalyzing = false;
-        // Destroy session after analysis to prevent context pollution
-        if (currentSession) {
-            try { currentSession.destroy(); } catch (e) { }
-            currentSession = null;
-        }
-    }
+  }).join('');
 }
-
-async function refinePrompt(originalPrompt, critique) {
-    // Prevent double-click issues
-    if (isRefining || isAnalyzing) {
-        console.log('[PBI Checker] Refine/analyze already in progress');
-        return;
-    }
-
-    isRefining = true;
-    updateDashboardState('refining');
-
-    try {
-        // Clear any pending input analysis
-        if (debounceTimer) clearTimeout(debounceTimer);
-
-        // === ADAPTIVE LOGIC: Build dynamic system prompt based on axis scores ===
-        let dynamicInstructions = [];
-
-        if (lastAnalysisResult && lastAnalysisResult.axis_scores) {
-            const scores = lastAnalysisResult.axis_scores;
-
-            // Inject specific strategies for weak axes
-            Object.keys(REFINE_STRATEGIES).forEach(axis => {
-                const strategy = REFINE_STRATEGIES[axis];
-                if (scores[axis] < strategy.threshold) {
-                    dynamicInstructions.push(strategy.instruction);
-                    console.log(`[PBI Checker] Injecting strategy for weak axis: ${axis} (${scores[axis]}/${strategy.threshold})`);
-                }
-            });
-        }
-
-        // Fallback if no weak axes detected (just polish)
-        if (dynamicInstructions.length === 0) {
-            dynamicInstructions.push("> **Optimization**: Polish the prompt for maximum clarity and conciseness.");
-        }
-
-        // Build the dynamic system prompt
-        const SYSTEM_PROMPT_DYNAMIC = `
-You are a "Strict Logic Architect" & "Prompt Engineering Expert".
-Your goal is to rewrite the user's VAGUE prompt into a PERFECT ENGINEERING SPECIFICATION (PBI 100/100).
-
-### ⚡ Critical Instructions (Applied based on analysis)
-${dynamicInstructions.join('\n\n')}
-
-### 📝 General Rules
-- **Preserve Intent**: Do not change what the user wants to do, only HOW they ask for it.
-- **Language**: Keep the result in the **same language** as the user's original prompt (Korean -> Korean, English -> English).
-- **Output**: Output **ONLY** the refined prompt text. No explanations, no markdown code blocks around the text.
-`;
-
-        // Create session with dynamic system prompt
-        await createSession('refine', SYSTEM_PROMPT_DYNAMIC);
-
-        const refinementPrompt = `
-Original User Prompt:
-"${originalPrompt}"
-
-Refine this now.
-`;
-
-        console.log('[PBI Checker] Refining prompt...');
-        const refinedText = await currentSession.prompt(refinementPrompt);
-        console.log('[PBI Checker] Refined text:', refinedText);
-
-        // Update input
-        const inputElement = document.querySelector(currentSiteConfig.inputSelector);
-        if (inputElement) {
-            if (inputElement.contentEditable === 'true') {
-                inputElement.innerText = refinedText.trim();
-            } else {
-                inputElement.value = refinedText.trim();
-            }
-
-            // Trigger events
-            inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-            inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-
-        // Set cooldown timestamp to prevent immediate re-analysis
-        lastRefineTime = Date.now();
-        updateDashboardState('ready');
-
-        // Skip auto re-analysis (user can manually trigger if needed)
-        // setTimeout(() => analyzePBI(refinedText), 500);
-
-    } catch (err) {
-        console.error('[PBI Checker] Refinement error:', err);
-        updateDashboardState('error', 'Refinement failed');
-    } finally {
-        isRefining = false;
-        // Destroy session after refine
-        if (currentSession) {
-            try { currentSession.destroy(); } catch (e) { }
-            currentSession = null;
-        }
-    }
-}
-
-// NEW: Reset dashboard to idle state
-function resetDashboard() {
-    if (!dashboardWidget) return;
-
-    const scoreValue = dashboardWidget.querySelector('.pbi-score-value');
-    const critiqueText = dashboardWidget.querySelector('.pbi-critique-text');
-    const refineBtn = dashboardWidget.querySelector('.pbi-refine-btn');
-    const actionTooltip = dashboardWidget.querySelector('.pbi-action-tooltip');
-
-    if (scoreValue) {
-        scoreValue.textContent = '--%';
-        scoreValue.className = 'pbi-score-value';
-    }
-    if (critiqueText) {
-        critiqueText.textContent = 'Type a prompt to analyze...';
-        critiqueText.className = 'pbi-critique-text pbi-critique-placeholder short';
-    }
-    if (refineBtn) refineBtn.style.display = 'none';
-    if (actionTooltip) actionTooltip.textContent = '';
-
-    updateDashboardState('idle');
-    blockSendButton(false);
-    dashboardWidget.classList.remove('visible');
-
-    lastAnalyzedText = '';
-    console.log('[PBI Checker] Dashboard reset to idle');
-}
-
-function parseJSONResponse(rawResponse) {
-    try {
-        // Try to extract JSON from the response
-        let jsonStr = rawResponse.trim();
-
-        // Remove markdown code blocks if present
-        const jsonMatch = jsonStr.match(/```(?: json) ?\s * ([\s\S] *?)```/);
-        if (jsonMatch) {
-            jsonStr = jsonMatch[1].trim();
-        }
-
-        // Try to find JSON object
-        const objectMatch = jsonStr.match(/\{[\s\S]*\}/);
-        if (objectMatch) {
-            jsonStr = objectMatch[0];
-        }
-
-        const parsed = JSON.parse(jsonStr);
-
-        // Validate required fields
-        if (typeof parsed.total_score !== 'number') {
-            throw new Error('Missing total_score');
-        }
-
-        // Set defaults for missing fields
-        parsed.axis_scores = parsed.axis_scores || {
-            logic: 0,
-            completeness: 0,
-            constraints: 0,
-            erosion_risk: 0
-        };
-        parsed.critique_ko = parsed.critique_ko || '분석 완료';
-        parsed.action_item = parsed.action_item || 'No specific action';
-
-        return parsed;
-    } catch (err) {
-        console.error('[PBI Checker] JSON parse error:', err);
-        console.error('[PBI Checker] Raw response was:', rawResponse);
-        return null;
-    }
-}
-
-// ========================================
-// Dashboard Widget
-// ========================================
 
 function createDashboardWidget() {
-    const widget = document.createElement('div');
-    widget.id = 'pbi-dashboard-widget';
+  const widget = document.createElement('section');
+  widget.id = 'pbi-dashboard-widget';
+  widget.dataset.mode = 'idle';
+  widget.dataset.scoreBand = 'none';
 
-    widget.innerHTML = `
-    <div class="pbi-score-section">
-      <span class="pbi-brain-icon">🧠</span>
-      <span class="pbi-score-value">--</span>
-    </div>
-    <div class="pbi-axis-breakdown">
-      <div class="pbi-axis-row">
-        <span class="pbi-axis-label">Logic</span>
-        <span class="pbi-axis-value" data-axis="logic">--/25</span>
+  widget.innerHTML = `
+    <div class="pbi-top-row">
+      <div class="pbi-score-area">
+        <div class="pbi-score-ring">
+          <span class="pbi-score-text">--</span>
+        </div>
+        <div class="pbi-copy">
+          <p class="pbi-kicker">PBI SCORE</p>
+          <p class="pbi-headline">입력하면 즉시 프롬프트 구조를 진단합니다</p>
+        </div>
       </div>
-      <div class="pbi-axis-row">
-        <span class="pbi-axis-label">Completeness</span>
-        <span class="pbi-axis-value" data-axis="completeness">--/25</span>
-      </div>
-      <div class="pbi-axis-row">
-        <span class="pbi-axis-label">Constraints</span>
-        <span class="pbi-axis-value" data-axis="constraints">--/25</span>
-      </div>
-      <div class="pbi-axis-row">
-        <span class="pbi-axis-label">Erosion Risk</span>
-        <span class="pbi-axis-value" data-axis="erosion_risk">--/25</span>
+      <div class="pbi-btn-group">
+        <button type="button" class="pbi-btn pbi-btn-ghost" data-action="toggle">상세 보기</button>
+        <button type="button" class="pbi-btn pbi-btn-primary" data-action="analyze">분석</button>
+        <button type="button" class="pbi-btn pbi-btn-accent" data-action="refine" disabled>개선</button>
       </div>
     </div>
-    <div class="pbi-critique-section">
-      <span class="pbi-critique-text pbi-critique-placeholder">Type a prompt to analyze...</span>
+
+    <div class="pbi-details" aria-hidden="true">
+      <div class="pbi-axis-grid">
+        ${getAxisMarkup()}
+      </div>
+      <div class="pbi-action-card">
+        <p class="pbi-action-label">NEXT ACTION</p>
+        <p class="pbi-action-text">목표, 출력형식, 제약조건 3가지를 명시하면 점수가 빠르게 올라갑니다.</p>
+      </div>
     </div>
-    <div class="pbi-status-section">
-      <button class="pbi-refine-btn" style="display: none;">⚡ Refine</button>
-      <div class="pbi-spinner"></div>
-      <span class="pbi-status-icon ready" style="display: none;">✓</span>
+
+    <div class="pbi-footer-row">
+      <span class="pbi-status-dot" data-tone="idle"></span>
+      <span class="pbi-status-text">프롬프트 입력 대기 중</span>
+      <span class="pbi-meta-text">자동 분석(변화 클 때만)</span>
     </div>
-    <div class="pbi-action-tooltip"></div>
-`;
 
-    // Attach Refine listener (Use mousedown to prevent blur race condition)
-    const refineBtn = widget.querySelector('.pbi-refine-btn');
-    if (refineBtn) {
-        refineBtn.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // Prevent input blur
-            e.stopPropagation();
+    <div class="pbi-guard-message" aria-live="polite"></div>
+  `;
 
-            const inputElement = document.querySelector(currentSiteConfig.inputSelector);
-            const text = getInputText(inputElement);
-            const critique = widget.querySelector('.pbi-critique-text').textContent;
+  const ui = {
+    scoreText: widget.querySelector('.pbi-score-text'),
+    kicker: widget.querySelector('.pbi-kicker'),
+    headline: widget.querySelector('.pbi-headline'),
+    actionText: widget.querySelector('.pbi-action-text'),
+    statusText: widget.querySelector('.pbi-status-text'),
+    statusDot: widget.querySelector('.pbi-status-dot'),
+    metaText: widget.querySelector('.pbi-meta-text'),
+    guardMessage: widget.querySelector('.pbi-guard-message'),
+    toggleButton: widget.querySelector('[data-action="toggle"]'),
+    analyzeButton: widget.querySelector('[data-action="analyze"]'),
+    refineButton: widget.querySelector('[data-action="refine"]'),
+    details: widget.querySelector('.pbi-details'),
+    axisValues: {},
+    axisBars: {}
+  };
 
-            if (text && text.length > 0) {
-                refinePrompt(text, critique);
-            }
-        });
-    }
+  for (const key of AXIS_KEYS) {
+    ui.axisValues[key] = widget.querySelector(`[data-axis-value="${key}"]`);
+    ui.axisBars[key] = widget.querySelector(`[data-axis-fill="${key}"]`);
+  }
 
-    return widget;
+  ui.toggleButton.addEventListener('click', () => {
+    state.expanded = !state.expanded;
+    widget.classList.toggle('pbi-expanded', state.expanded);
+    ui.details.setAttribute('aria-hidden', state.expanded ? 'false' : 'true');
+    ui.toggleButton.textContent = state.expanded ? '접기' : '상세 보기';
+  });
+
+  ui.analyzeButton.addEventListener('click', () => {
+    analyzeCurrentInput({ force: true, source: 'manual' });
+  });
+
+  ui.refineButton.addEventListener('click', () => {
+    refineCurrentInput();
+  });
+
+  state.widget = widget;
+  state.ui = ui;
+
+  return widget;
 }
 
 function injectDashboard() {
-    // Remove existing widget if any
-    if (dashboardWidget && dashboardWidget.parentNode) {
-        dashboardWidget.remove();
-        dashboardWidget = null;
-    }
+  if (!state.siteConfig) return;
 
-    if (!currentSiteConfig) {
-        console.warn('[PBI Checker] No site config found');
-        return;
-    }
+  if (state.widget && state.widget.parentNode) {
+    state.widget.remove();
+  }
 
-    // Find injection target
-    let wrapper = document.querySelector(currentSiteConfig.wrapperSelector);
-    const inputElement = document.querySelector(currentSiteConfig.inputSelector);
+  const inputElement = getVisibleElement(state.siteConfig.inputSelector);
+  const wrapper = getVisibleElement(state.siteConfig.wrapperSelector) || inputElement?.closest('form') || inputElement?.parentElement;
 
-    // Fallback: if wrapper not found but input exists, use input's parent
-    if (!wrapper && inputElement) {
-        console.log('[PBI Checker] Wrapper not found, using input parent as fallback');
-        wrapper = inputElement.parentElement;
-    }
+  if (!wrapper || !wrapper.parentElement) {
+    log('Dashboard injection skipped: wrapper not found');
+    return;
+  }
 
-    if (!wrapper) {
-        console.warn('[PBI Checker] Could not find any injection target');
-        return;
-    }
+  const widget = createDashboardWidget();
 
-    dashboardWidget = createDashboardWidget();
-    const hostname = window.location.hostname;
+  const isClaude = window.location.hostname.includes('claude.ai');
+  const claudeGrid = document.querySelector('[data-testid="chat-input-grid-container"]');
 
-    // Injection Logic with site-specific handling
+  if (isClaude && claudeGrid && claudeGrid.parentElement) {
+    claudeGrid.parentElement.insertBefore(widget, claudeGrid);
+  } else {
+    wrapper.parentElement.insertBefore(widget, wrapper);
+  }
+
+  requestAnimationFrame(() => {
+    updateVisibilityByInput();
+  });
+
+  renderIdle();
+}
+
+function clearInputBindings() {
+  for (const cleanup of state.cleanupInputBindings) {
     try {
-        if (hostname.includes('claude.ai')) {
-            // Claude: Grid layout causes overlap if injected as sibling in grid-area
-            // Target the MAIN GRID CONTAINER or specific wrapper
-            const gridContainer = document.querySelector('[data-testid="chat-input-grid-container"]');
-
-            let target = gridContainer || wrapper;
-
-            // If we found the grid container, inject BEFORE it (safest)
-            if (gridContainer && gridContainer.parentElement) {
-                target = gridContainer;
-                console.log('[PBI Checker] Found Claude Grid Container, injecting outside...');
-            } else {
-                // Fallback logic
-                if (wrapper.offsetHeight < 50 && wrapper.parentElement) {
-                    target = wrapper.parentElement;
-                }
-                // Traverse up to find a non-grid area if possible
-                for (let i = 0; i < 3; i++) {
-                    if (target.classList.contains('flex') || target.tagName === 'FIELDSET') break;
-                    if (target.parentElement) target = target.parentElement;
-                }
-            }
-
-            // Insert BEFORE the target
-            if (target.parentElement) {
-                target.parentElement.insertBefore(dashboardWidget, target);
-
-                // Force spacing and layout
-                dashboardWidget.style.position = 'relative';
-                // dashboardWidget.style.display = 'flex'; // Removed to let CSS control visibility
-                dashboardWidget.style.marginBottom = '12px';
-                dashboardWidget.style.width = '100%';
-                dashboardWidget.style.maxWidth = '100%';
-                dashboardWidget.style.zIndex = '9999';
-            }
-            console.log('[PBI Checker] Claude injection complete (Grid Fix)');
-
-        } else if (hostname.includes('gemini.google.com')) {
-            wrapper.parentElement?.insertBefore(dashboardWidget, wrapper);
-            dashboardWidget.style.marginBottom = '12px';
-
-        } else {
-            // Default (ChatGPT): Inject before wrapper
-            wrapper.parentElement?.insertBefore(dashboardWidget, wrapper);
-        }
-    } catch (e) {
-        console.error('[PBI Checker] Primary injection failed:', e);
-        // Ultimate fallback: append to body at fixed position
-        try {
-            document.body.appendChild(dashboardWidget);
-            dashboardWidget.style.position = 'fixed';
-            dashboardWidget.style.bottom = '80px';
-            dashboardWidget.style.left = '50%';
-            dashboardWidget.style.transform = 'translateX(-50%)';
-            console.log('[PBI Checker] Fallback: Fixed position injection');
-        } catch (e2) {
-            console.error('[PBI Checker] All injection methods failed');
-        }
+      cleanup();
+    } catch (err) {
+      log('Cleanup skipped:', err);
     }
-
-    // Trigger visibility
-    requestAnimationFrame(() => {
-        dashboardWidget.classList.add('visible');
-    });
-
-    console.log('[PBI Checker] Dashboard injected');
+  }
+  state.cleanupInputBindings = [];
+  state.activeInput = null;
+  state.activeSendButton = null;
 }
 
-function updateDashboardVisibility(textLength) {
-    if (!dashboardWidget) return;
+function shouldBlockSend() {
+  if (!state.settings.blockLowScore) return false;
+  if (!state.lastResult) return false;
 
-    if (textLength >= MIN_VISIBILITY_LENGTH) {
-        dashboardWidget.classList.add('visible');
-    } else {
-        dashboardWidget.classList.remove('visible');
-    }
+  const currentText = normalizeText(getInputText(state.activeInput));
+  if (!currentText) return false;
+
+  if (currentText !== normalizeText(state.lastAnalyzedText)) {
+    return false;
+  }
+
+  return Number(state.lastResult.total_score) < Number(state.settings.blockThreshold || 30);
 }
 
-function updateDashboardState(state, errorMessage = '') {
-    if (!dashboardWidget) return;
+function schedulePostSendCheck() {
+  if (state.postSendTimer) {
+    clearTimeout(state.postSendTimer);
+  }
 
-    const spinner = dashboardWidget.querySelector('.pbi-spinner');
-    const statusIcon = dashboardWidget.querySelector('.pbi-status-icon');
-    const critiqueText = dashboardWidget.querySelector('.pbi-critique-text');
-    const refineBtn = dashboardWidget.querySelector('.pbi-refine-btn');
-
-    switch (state) {
-        case 'analyzing':
-            spinner.classList.add('active');
-            statusIcon.style.display = 'none';
-            if (refineBtn) refineBtn.style.display = 'none';
-            critiqueText.textContent = 'Analyzing...';
-            critiqueText.classList.add('pbi-critique-placeholder');
-            critiqueText.classList.add('short');
-            break;
-
-        case 'refining':
-            spinner.classList.add('active');
-            statusIcon.style.display = 'none';
-            if (refineBtn) refineBtn.style.display = 'none';
-            critiqueText.textContent = 'Refining prompt...';
-            critiqueText.classList.add('pbi-critique-placeholder');
-            critiqueText.classList.add('short');
-            break;
-
-        case 'downloading':
-            spinner.classList.add('active');
-            statusIcon.style.display = 'none';
-            if (refineBtn) refineBtn.style.display = 'none';
-            critiqueText.textContent = errorMessage || 'Downloading AI model...';
-            critiqueText.classList.add('pbi-critique-placeholder');
-            critiqueText.classList.add('short');
-            break;
-
-        case 'ready':
-            spinner.classList.remove('active');
-            statusIcon.style.display = 'inline';
-            if (refineBtn) refineBtn.style.display = 'flex';
-            statusIcon.className = 'pbi-status-icon ready';
-            statusIcon.textContent = '✓';
-            break;
-
-        case 'error':
-            spinner.classList.remove('active');
-            statusIcon.style.display = 'inline';
-            statusIcon.className = 'pbi-status-icon error';
-            statusIcon.textContent = '✕';
-            critiqueText.textContent = `Error: ${errorMessage} `;
-            critiqueText.classList.add('short');
-            break;
-
-        case 'idle':
-        default:
-            spinner.classList.remove('active');
-            statusIcon.style.display = 'none';
-            break;
+  state.postSendTimer = setTimeout(() => {
+    const text = normalizeText(getInputText(state.activeInput));
+    if (!text) {
+      renderIdle();
+      setWidgetVisibility(false);
     }
+  }, 700);
 }
 
-
-function updateDashboardWithResult(result) {
-    if (!dashboardWidget) return;
-
-    const scoreValue = dashboardWidget.querySelector('.pbi-score-value');
-    const critiqueText = dashboardWidget.querySelector('.pbi-critique-text');
-    const actionTooltip = dashboardWidget.querySelector('.pbi-action-tooltip');
-
-    // Update score
-    const score = Math.round(result.total_score);
-    scoreValue.textContent = `${score}% `;
-
-    // Set score color class
-    scoreValue.className = 'pbi-score-value';
-    if (score <= 30) {
-        scoreValue.classList.add('score-critical');
-    } else if (score <= 60) {
-        scoreValue.classList.add('score-warning');
-    } else if (score <= 80) {
-        scoreValue.classList.add('score-moderate');
-    } else {
-        scoreValue.classList.add('score-good');
+function handlePotentialSend(eventSource, event) {
+  if (shouldBlockSend()) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) {
+      event.stopImmediatePropagation();
     }
 
-    // Update axis breakdown
-    if (result.axis_scores) {
-        const axes = ['logic', 'completeness', 'constraints', 'erosion_risk'];
-        axes.forEach(axis => {
-            const elem = dashboardWidget.querySelector(`[data-axis="${axis}"]`);
-            if (elem) {
-                const value = result.axis_scores[axis] || 0;
-                elem.textContent = `${value}/25`;
-            }
-        });
-    }
+    const score = Math.round(Number(state.lastResult?.total_score || 0));
+    showGuardMessage(`전송 차단 (${score} < ${state.settings.blockThreshold}). 프롬프트를 수정하거나 '개선'을 눌러주세요.`);
+    return false;
+  }
 
-    // Update critique
-    critiqueText.textContent = result.action_item || 'No suggestion';
-    critiqueText.classList.remove('pbi-critique-placeholder');
-
-    // Handle marquee for long text
-    if (result.critique_ko.length > 40) {
-        critiqueText.classList.remove('short');
-    } else {
-        critiqueText.classList.add('short');
-    }
-
-    // Update action tooltip
-    actionTooltip.textContent = `💡 ${result.action_item}`;
-
-    // Update state
-    updateDashboardState('ready');
-
-    // Show refine button for high-risk prompts
-    const refineBtn = dashboardWidget.querySelector('.pbi-refine-btn');
-    if (refineBtn) {
-        refineBtn.style.display = 'flex';
-    }
-
-    // Handle send button blocking
-    if (settings.blockLowScore && score < settings.blockThreshold) {
-        blockSendButton(true);
-    } else {
-        blockSendButton(false);
-    }
+  log('Send allowed from', eventSource);
+  schedulePostSendCheck();
+  return true;
 }
 
-function blockSendButton(block) {
-    if (!currentSiteConfig) return;
+function bindComposer() {
+  if (!state.siteConfig) return;
 
-    const sendButton = document.querySelector(currentSiteConfig.sendButtonSelector);
-    if (!sendButton) return;
+  const inputElement = getVisibleElement(state.siteConfig.inputSelector);
+  if (!inputElement) return;
 
-    if (block) {
-        sendButton.classList.add('pbi-send-blocker', 'blocked');
-    } else {
-        sendButton.classList.remove('pbi-send-blocker', 'blocked');
-    }
-}
+  const sendButton = getVisibleElement(state.siteConfig.sendButtonSelector);
 
-// ========================================
-// Input Monitoring
-// ========================================
+  const sameInput = state.activeInput === inputElement;
+  const sameButton = state.activeSendButton === sendButton;
+  if (sameInput && sameButton) return;
 
-function getInputText(inputElement) {
-    if (!inputElement) return '';
+  clearInputBindings();
 
-    // Handle contenteditable
-    if (inputElement.contentEditable === 'true') {
-        return inputElement.innerText || inputElement.textContent || '';
-    }
+  state.activeInput = inputElement;
+  state.activeSendButton = sendButton;
 
-    // Handle textarea/input
-    return inputElement.value || '';
-}
+  const handleInput = () => {
+    if (!state.settings.enabled) return;
 
-function setupInputMonitoring() {
-    if (!currentSiteConfig) return;
+    const text = normalizeText(getInputText(inputElement));
+    updateVisibilityByInput();
 
-    const inputElement = document.querySelector(currentSiteConfig.inputSelector);
-    if (!inputElement) {
-        console.warn('[PBI Checker] Could not find input element');
-        return;
+    if (state.debounceTimer) {
+      clearTimeout(state.debounceTimer);
+      state.debounceTimer = null;
     }
 
-    console.log('[PBI Checker] Setting up input monitoring on:', inputElement);
+    if (text.length < MIN_ANALYZE_LENGTH) {
+      if (!text) {
+        renderIdle();
+      }
+      return;
+    }
 
-    // Debounced input handler
-    const handleInput = () => {
-        const text = getInputText(inputElement);
-        updateDashboardVisibility(text.length);
+    if (!state.settings.autoAnalyze) {
+      if (state.ui) {
+        state.ui.metaText.textContent = '수동 분석 모드';
+        state.ui.statusText.textContent = '입력 완료 후 분석 버튼을 눌러주세요';
+      }
+      return;
+    }
 
-        // Clear existing timer
-        if (debounceTimer) {
-            clearTimeout(debounceTimer);
-        }
+    state.debounceTimer = setTimeout(() => {
+      analyzeCurrentInput({ force: false, source: 'auto' });
+    }, DEBOUNCE_DELAY_MS);
+  };
 
-        // Reset if text is cleared or significantly changed
-        if (text.length < MIN_TEXT_LENGTH) {
-            resetDashboard();
-            return;
-        }
+  const handleBlur = () => {
+    // Intentionally no immediate analysis on blur to avoid duplicate calls
+    // when users click surrounding controls.
+  };
 
-        // Set new timer for analysis
-        if (text.length >= MIN_TEXT_LENGTH && settings.enabled) {
-            debounceTimer = setTimeout(() => {
-                analyzePBI(text);
-            }, DEBOUNCE_DELAY);
-        }
+  const handleKeydown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      handlePotentialSend('enter', event);
+    }
+  };
+
+  inputElement.addEventListener('input', handleInput);
+  inputElement.addEventListener('blur', handleBlur);
+  inputElement.addEventListener('keydown', handleKeydown, true);
+
+  state.cleanupInputBindings.push(() => inputElement.removeEventListener('input', handleInput));
+  state.cleanupInputBindings.push(() => inputElement.removeEventListener('blur', handleBlur));
+  state.cleanupInputBindings.push(() => inputElement.removeEventListener('keydown', handleKeydown, true));
+
+  if (sendButton) {
+    const handleClick = (event) => {
+      handlePotentialSend('button', event);
     };
 
-    // Blur handler for immediate analysis
-    const handleBlur = () => {
-        if (debounceTimer) {
-            clearTimeout(debounceTimer);
-        }
+    sendButton.addEventListener('click', handleClick, true);
+    state.cleanupInputBindings.push(() => sendButton.removeEventListener('click', handleClick, true));
+  }
 
-        const text = getInputText(inputElement);
-        if (text.length >= MIN_TEXT_LENGTH && settings.enabled) {
-            analyzePBI(text);
-        }
-    };
-
-    // Add event listeners
-    inputElement.addEventListener('input', handleInput);
-    inputElement.addEventListener('blur', handleBlur);
-
-    // Monitor send button for reset after sending
-    setupSendButtonMonitoring();
-
-    // Initial check
-    handleInput();
+  updateVisibilityByInput();
 }
 
-// NEW: Monitor send button clicks to reset dashboard after sending
-function setupSendButtonMonitoring() {
-    if (!currentSiteConfig) return;
+async function analyzePromptText(promptText, source = 'auto', force = false, allowWhileRefining = false) {
+  const normalized = normalizeText(promptText);
+  if (!normalized || normalized.length < MIN_ANALYZE_LENGTH) return null;
 
-    const sendButton = document.querySelector(currentSiteConfig.sendButtonSelector);
-    if (!sendButton) {
-        console.log('[PBI Checker] Send button not found for monitoring');
-        return;
+  if (!force) {
+    if (normalized === normalizeText(state.lastAnalyzedText)) {
+      log('Skipping duplicate analysis');
+      return state.lastResult;
     }
-
-    // Add click listener to reset after send
-    sendButton.addEventListener('click', () => {
-        console.log('[PBI Checker] Send detected, resetting dashboard...');
-        // Delay reset to allow message to be sent
-        setTimeout(() => {
-            resetDashboard();
-        }, 500);
-    }, { capture: true });
-
-    // Also listen for Enter key in input
-    const inputElement = document.querySelector(currentSiteConfig.inputSelector);
-    if (inputElement) {
-        inputElement.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                console.log('[PBI Checker] Enter detected, resetting dashboard...');
-                setTimeout(() => {
-                    resetDashboard();
-                }, 500);
-            }
-        });
+    if (!isSignificantChange(normalized, state.lastAnalyzedText)) {
+      log('Skipping minor edit analysis');
+      return state.lastResult;
     }
+  }
 
-    console.log('[PBI Checker] Send button monitoring active');
-}
-
-// ========================================
-// Site Detection & Initialization
-// ========================================
-
-function detectSite() {
-    const hostname = window.location.hostname;
-
-    for (const [domain, config] of Object.entries(SITE_CONFIGS)) {
-        if (hostname.includes(domain.replace('www.', ''))) {
-            console.log('[PBI Checker] Detected site:', domain);
-            return config;
-        }
-    }
-
-    console.warn('[PBI Checker] Unknown site:', hostname);
+  if (state.isAnalyzing || (state.isRefining && !allowWhileRefining)) {
     return null;
+  }
+
+  state.isAnalyzing = true;
+  const callId = ++state.analyzeCallId;
+  renderMode('analyzing');
+
+  try {
+    await ensureAIReady();
+
+    const session = await getAnalysisSession();
+    state.analysisSessionUses += 1;
+
+    const requestPrompt = `Score this prompt and return JSON only.\n${normalized}`;
+    const raw = await session.prompt(requestPrompt);
+
+    if (callId !== state.analyzeCallId) {
+      return null;
+    }
+
+    const parsed = parseAnalysisResponse(raw);
+    state.lastAnalyzedText = normalized;
+    state.lastResult = parsed;
+
+    renderResult(parsed, source);
+    return parsed;
+  } catch (err) {
+    log('Analysis failed:', err);
+    renderMode('error', toUserErrorMessage(err, 'analysis'));
+    destroyAllSessions();
+    return null;
+  } finally {
+    state.isAnalyzing = false;
+  }
 }
 
-let reinjectionPending = false;
+function analyzeCurrentInput({ force = false, source = 'auto' } = {}) {
+  const text = getInputText(state.activeInput);
+  return analyzePromptText(text, source, force);
+}
+
+async function refineCurrentInput() {
+  if (state.isAnalyzing || state.isRefining) return;
+
+  const inputElement = state.activeInput;
+  const originalText = normalizeText(getInputText(inputElement));
+  if (!inputElement || originalText.length < MIN_ANALYZE_LENGTH) {
+    showGuardMessage('개선 기능을 쓰려면 조금 더 긴 프롬프트가 필요합니다.');
+    return;
+  }
+
+  state.isRefining = true;
+  renderMode('refining');
+
+  let refineSession = null;
+
+  try {
+    await ensureAIReady();
+
+    const systemPrompt = buildRefineSystemPrompt(state.lastResult);
+    refineSession = await createSession({ mode: 'refine', systemPrompt });
+
+    const refinementPrompt = `Rewrite this prompt with stronger structure and constraints:\n\n${originalText}`;
+    const refinedText = normalizeText(await refineSession.prompt(refinementPrompt));
+
+    if (!refinedText) {
+      throw new Error('Refine returned empty output.');
+    }
+
+    setInputText(inputElement, refinedText);
+    state.lastAnalyzedText = '';
+    renderMode('ready', '개선 완료, 다시 분석 중...');
+
+    await analyzePromptText(refinedText, 'refine', true, true);
+  } catch (err) {
+    log('Refine failed:', err);
+    renderMode('error', toUserErrorMessage(err, 'refine'));
+  } finally {
+    state.isRefining = false;
+    safeDestroySession(refineSession);
+  }
+}
 
 function setupMutationObserver() {
-    if (observer) {
-        observer.disconnect();
-    }
+  if (state.observer) {
+    state.observer.disconnect();
+  }
 
-    observer = new MutationObserver((mutations) => {
-        // Prevent infinite re-injection loop with debounce flag
-        if (reinjectionPending) return;
+  state.observer = new MutationObserver(() => {
+    if (state.observerTicking) return;
 
-        // Check if dashboard was removed (SPA navigation)
-        if (dashboardWidget && !document.body.contains(dashboardWidget)) {
-            console.log('[PBI Checker] Dashboard removed, scheduling re-injection...');
-            reinjectionPending = true;
-            dashboardWidget = null; // Clear reference to removed widget
+    state.observerTicking = true;
+    requestAnimationFrame(() => {
+      state.observerTicking = false;
 
-            setTimeout(() => {
-                reinjectionPending = false;
-                injectDashboard();
-                setupInputMonitoring();
-            }, 1000); // Longer delay to avoid race conditions
-        }
+      if (!state.settings.enabled) return;
 
-        // Check for input element changes (but not too frequently)
-        if (currentSiteConfig && !reinjectionPending) {
-            const inputElement = document.querySelector(currentSiteConfig.inputSelector);
-            if (inputElement && !inputElement.dataset.pbiMonitored) {
-                inputElement.dataset.pbiMonitored = 'true';
-                setupInputMonitoring();
-            }
-        }
+      if (!state.widget || !document.body.contains(state.widget)) {
+        injectDashboard();
+      }
+
+      bindComposer();
     });
+  });
 
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-}
-
-// NEW: Monitor URL changes to reset session when switching chats
-let lastUrl = window.location.href;
-
-function setupUrlMonitoring() {
-    console.log('[PBI Checker] Setting up URL monitoring...');
-
-    // 1. History API Patching
-    const pushState = history.pushState;
-    history.pushState = function () {
-        pushState.apply(history, arguments);
-        handleUrlChange();
-    };
-
-    const replaceState = history.replaceState;
-    history.replaceState = function () {
-        replaceState.apply(history, arguments);
-        handleUrlChange();
-    };
-
-    // 2. Popstate (Back/Forward)
-    window.addEventListener('popstate', handleUrlChange);
-
-    // 3. Periodic Check (Fallback)
-    setInterval(() => {
-        if (window.location.href !== lastUrl) {
-            handleUrlChange();
-        }
-    }, 1000);
+  state.observer.observe(document.body, { childList: true, subtree: true });
 }
 
 function handleUrlChange() {
-    // Small delay to let title/URL settle
-    setTimeout(() => {
-        if (window.location.href !== lastUrl) {
-            console.log('[PBI Checker] URL changed, resetting dashboard...');
-            lastUrl = window.location.href;
+  const nowUrl = window.location.href;
+  if (state.lastUrl === nowUrl) return;
 
-            // Reset dashboard state
-            resetDashboard();
+  state.lastUrl = nowUrl;
+  destroyAllSessions();
 
-            // Re-detect site config in case domain logic changes (rare but possible)
-            currentSiteConfig = detectSite();
-        }
-    }, 100);
+  if (state.debounceTimer) {
+    clearTimeout(state.debounceTimer);
+    state.debounceTimer = null;
+  }
+
+  state.lastResult = null;
+  state.lastAnalyzedText = '';
+  renderIdle();
+
+  setTimeout(() => {
+    state.siteConfig = detectSiteConfig();
+    if (!state.siteConfig) return;
+
+    injectDashboard();
+    bindComposer();
+  }, 180);
 }
 
-async function loadSettings() {
-    return new Promise((resolve) => {
-        if (typeof chrome !== 'undefined' && chrome.runtime) {
-            chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }, (response) => {
-                if (response) {
-                    settings = { ...settings, ...response };
-                }
-                resolve(settings);
-            });
+function setupUrlMonitoring() {
+  if (!window.__pbiHistoryPatched) {
+    window.__pbiHistoryPatched = true;
+
+    const originalPushState = history.pushState;
+    history.pushState = function patchedPushState() {
+      originalPushState.apply(history, arguments);
+      handleUrlChange();
+    };
+
+    const originalReplaceState = history.replaceState;
+    history.replaceState = function patchedReplaceState() {
+      originalReplaceState.apply(history, arguments);
+      handleUrlChange();
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+  }
+
+  if (state.urlIntervalId) {
+    clearInterval(state.urlIntervalId);
+  }
+
+  state.urlIntervalId = setInterval(handleUrlChange, 1200);
+}
+
+function cleanupRuntime() {
+  if (state.debounceTimer) {
+    clearTimeout(state.debounceTimer);
+    state.debounceTimer = null;
+  }
+  if (state.postSendTimer) {
+    clearTimeout(state.postSendTimer);
+    state.postSendTimer = null;
+  }
+  if (state.guardMessageTimer) {
+    clearTimeout(state.guardMessageTimer);
+    state.guardMessageTimer = null;
+  }
+  if (state.urlIntervalId) {
+    clearInterval(state.urlIntervalId);
+    state.urlIntervalId = null;
+  }
+
+  clearInputBindings();
+
+  if (state.observer) {
+    state.observer.disconnect();
+    state.observer = null;
+  }
+
+  destroyAllSessions();
+
+  if (state.widget) {
+    state.widget.remove();
+    state.widget = null;
+    state.ui = null;
+  }
+}
+
+function getRuntimeStatus() {
+  const score = state.lastResult ? Math.round(Number(state.lastResult.total_score || 0)) : null;
+  return {
+    ok: true,
+    enabled: state.settings.enabled,
+    autoAnalyze: state.settings.autoAnalyze,
+    site: state.siteConfig?.label || null,
+    aiAvailability: state.aiAvailability,
+    mode: state.mode,
+    score,
+    hasWidget: Boolean(state.widget)
+  };
+}
+
+async function startRuntime() {
+  await loadSettings();
+
+  if (!state.settings.enabled) {
+    cleanupRuntime();
+    return;
+  }
+
+  state.siteConfig = detectSiteConfig();
+  if (!state.siteConfig) {
+    cleanupRuntime();
+    return;
+  }
+
+  await checkAIAvailability();
+
+  injectDashboard();
+  bindComposer();
+  setupMutationObserver();
+  setupUrlMonitoring();
+
+  const existingText = normalizeText(getInputText(state.activeInput));
+  if (existingText.length >= MIN_SHOW_LENGTH) {
+    setWidgetVisibility(true);
+  }
+}
+
+function setupMessageHandlers() {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    switch (message.type) {
+      case 'TOGGLE_ENABLED':
+        state.settings.enabled = Boolean(message.enabled);
+        if (state.settings.enabled) {
+          startRuntime().then(() => sendResponse({ success: true }));
         } else {
-            resolve(settings);
+          cleanupRuntime();
+          sendResponse({ success: true });
         }
-    });
+        return true;
+
+      case 'UPDATE_SETTINGS':
+        state.settings = { ...state.settings, ...(message.settings || {}) };
+        chrome.storage.local.set(message.settings || {});
+        if (state.ui && message.settings && Object.prototype.hasOwnProperty.call(message.settings, 'autoAnalyze')) {
+          state.ui.metaText.textContent = state.settings.autoAnalyze ? '자동 분석(변화 클 때만)' : '수동 분석 모드';
+        }
+        updateGuardVisual();
+        sendResponse({ success: true });
+        return false;
+
+      case 'GET_RUNTIME_STATUS':
+        sendResponse(getRuntimeStatus());
+        return false;
+
+      default:
+        return false;
+    }
+  });
 }
 
 async function initialize() {
-    console.log('[PBI Checker] Starting initialization...');
+  if (state.initialized) return;
+  state.initialized = true;
 
-    // Load settings
-    await loadSettings();
-    console.log('[PBI Checker] Settings loaded:', settings);
-
-    if (!settings.enabled) {
-        console.log('[PBI Checker] Extension disabled by settings');
-        return;
-    }
-
-    // Detect site
-    currentSiteConfig = detectSite();
-    if (!currentSiteConfig) {
-        console.log('[PBI Checker] Site not supported');
-        return;
-    }
-
-    // Check AI availability
-    const aiStatus = await checkAIAvailability();
-    console.log('[PBI Checker] AI Status:', aiStatus);
-
-    // Wait for page to fully load
-    if (document.readyState !== 'complete') {
-        await new Promise(resolve => window.addEventListener('load', resolve));
-    }
-
-    // Additional delay for SPAs
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Inject dashboard
-    injectDashboard();
-
-    // Setup input monitoring
-    setupInputMonitoring();
-
-    // Setup mutation observer for SPA
-    setupMutationObserver();
-
-    // Setup URL monitoring for navigation
-    setupUrlMonitoring();
-
-    console.log('[PBI Checker] Initialization complete!');
+  setupMessageHandlers();
+  await startRuntime();
 }
 
-// ========================================
-// Message Handling
-// ========================================
-
-if (typeof chrome !== 'undefined' && chrome.runtime) {
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        console.log('[PBI Checker] Message received:', message);
-
-        switch (message.type) {
-            case 'TOGGLE_ENABLED':
-                settings.enabled = message.enabled;
-                if (settings.enabled) {
-                    initialize();
-                } else if (dashboardWidget) {
-                    dashboardWidget.remove();
-                    dashboardWidget = null;
-                }
-                sendResponse({ success: true });
-                break;
-
-            case 'UPDATE_SETTINGS':
-                settings = { ...settings, ...message.settings };
-                sendResponse({ success: true });
-                break;
-        }
-    });
-}
-
-// ========================================
-// Start
-// ========================================
-
-// Initialize when DOM is ready
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize);
+  document.addEventListener('DOMContentLoaded', initialize);
 } else {
-    initialize();
+  initialize();
 }

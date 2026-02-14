@@ -10,6 +10,7 @@ chrome.runtime.onInstalled.addListener((details) => {
   // Set default settings
   chrome.storage.local.set({
     enabled: true,
+    autoAnalyze: true,
     blockLowScore: false,
     blockThreshold: 30,
     debugMode: false
@@ -22,7 +23,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   switch (message.type) {
     case 'GET_SETTINGS':
-      chrome.storage.local.get(['enabled', 'blockLowScore', 'blockThreshold', 'debugMode'], (result) => {
+      chrome.storage.local.get(['enabled', 'autoAnalyze', 'blockLowScore', 'blockThreshold', 'debugMode'], (result) => {
         sendResponse(result);
       });
       return true; // Keep channel open for async response

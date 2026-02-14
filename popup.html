@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,229 +10,271 @@
       padding: 0;
       box-sizing: border-box;
     }
-    
-    body {
-      width: 320px;
-      min-height: 200px;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      color: #fff;
+
+    :root {
+      --bg: #f4f7fc;
+      --panel: #ffffff;
+      --line: #d9e3f4;
+      --text: #14233d;
+      --sub: #627a9e;
+      --accent: #2e6bde;
+      --good: #0f9d73;
+      --warn: #c9901e;
+      --bad: #ca4d4d;
     }
-    
+
+    body {
+      width: 336px;
+      min-height: 250px;
+      padding: 14px;
+      font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background: linear-gradient(180deg, #f8fbff, var(--bg));
+      color: var(--text);
+    }
+
     .header {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      gap: 10px;
+      margin-bottom: 12px;
     }
-    
+
     .header-icon {
-      font-size: 32px;
-      animation: pulse 2s ease-in-out infinite;
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #4f8fff, #2e6bde);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 8px 14px rgba(46, 107, 222, 0.25);
     }
-    
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.1); }
+
+    .header h1 {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.1;
     }
-    
-    .header-text h1 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-    
-    .header-text p {
+
+    .header p {
+      margin-top: 2px;
       font-size: 11px;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--sub);
     }
-    
+
     .status-card {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 16px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 13px;
+      padding: 10px;
+      margin-bottom: 12px;
+      box-shadow: 0 8px 16px rgba(56, 90, 148, 0.08);
     }
-    
+
     .status-row {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 7px;
     }
-    
+
     .status-row:last-child {
       margin-bottom: 0;
     }
-    
+
     .status-label {
-      font-size: 13px;
-      color: rgba(255, 255, 255, 0.8);
-    }
-    
-    .status-value {
       font-size: 12px;
+      color: #344d72;
+    }
+
+    .status-value {
+      font-size: 11px;
+      font-weight: 700;
       padding: 4px 8px;
-      border-radius: 6px;
-      font-weight: 500;
+      border-radius: 8px;
+      border: 1px solid #d3dff1;
+      background: #eff4fc;
+      color: #35517c;
+      text-transform: capitalize;
     }
-    
+
     .status-value.ready {
-      background: rgba(34, 197, 94, 0.2);
-      color: #22c55e;
+      border-color: #b9e7d9;
+      background: #e9f8f2;
+      color: var(--good);
     }
-    
+
     .status-value.loading {
-      background: rgba(234, 179, 8, 0.2);
-      color: #eab308;
+      border-color: #f0deb0;
+      background: #fff7e8;
+      color: var(--warn);
     }
-    
+
     .status-value.error {
-      background: rgba(239, 68, 68, 0.2);
-      color: #ef4444;
+      border-color: #efc5c5;
+      background: #fff0f0;
+      color: var(--bad);
     }
-    
+
     .toggle-section {
-      margin-bottom: 16px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 13px;
+      padding: 2px 10px;
+      box-shadow: 0 8px 16px rgba(56, 90, 148, 0.08);
+      margin-bottom: 10px;
     }
-    
+
     .toggle-row {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       padding: 10px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid #e5ecf8;
     }
-    
+
     .toggle-row:last-child {
-      border-bottom: none;
+      border-bottom: 0;
     }
-    
-    .toggle-info {
-      flex: 1;
-    }
-    
+
     .toggle-label {
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 2px;
+      font-size: 12px;
+      font-weight: 650;
+      color: #1f355a;
     }
-    
+
     .toggle-desc {
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.5);
+      margin-top: 2px;
+      font-size: 10px;
+      color: var(--sub);
+      line-height: 1.35;
     }
-    
-    /* Toggle Switch */
+
     .toggle-switch {
       position: relative;
       width: 44px;
       height: 24px;
       flex-shrink: 0;
     }
-    
+
     .toggle-switch input {
       opacity: 0;
       width: 0;
       height: 0;
     }
-    
+
     .toggle-slider {
       position: absolute;
-      cursor: pointer;
       inset: 0;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 24px;
-      transition: 0.3s;
+      cursor: pointer;
+      border-radius: 99px;
+      background: #d5dfee;
+      transition: 0.18s ease;
     }
-    
+
     .toggle-slider::before {
       content: '';
       position: absolute;
-      height: 18px;
       width: 18px;
+      height: 18px;
       left: 3px;
-      bottom: 3px;
-      background: #fff;
-      border-radius: 50%;
-      transition: 0.3s;
+      top: 3px;
+      border-radius: 999px;
+      background: white;
+      box-shadow: 0 2px 5px rgba(41, 69, 111, 0.2);
+      transition: 0.18s ease;
     }
-    
+
     .toggle-switch input:checked + .toggle-slider {
-      background: #3b82f6;
+      background: var(--accent);
     }
-    
+
     .toggle-switch input:checked + .toggle-slider::before {
       transform: translateX(20px);
     }
-    
+
     .footer {
       text-align: center;
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.4);
+      font-size: 10px;
+      color: #6c82a6;
     }
-    
+
     .footer a {
-      color: #3b82f6;
+      color: var(--accent);
       text-decoration: none;
-    }
-    
-    .footer a:hover {
-      text-decoration: underline;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <span class="header-icon">🧠</span>
-    <div class="header-text">
+    <span class="header-icon">P</span>
+    <div>
       <h1>PBI Checker</h1>
-      <p>Anti-Brainrot Protocol</p>
+      <p>Prompt Quality Runtime</p>
     </div>
   </div>
-  
+
   <div class="status-card">
     <div class="status-row">
-      <span class="status-label">AI Status</span>
-      <span id="ai-status" class="status-value loading">Checking...</span>
-    </div>
-    <div class="status-row">
-      <span class="status-label">Current Site</span>
+      <span class="status-label">현재 사이트</span>
       <span id="site-status" class="status-value">--</span>
     </div>
+    <div class="status-row">
+      <span class="status-label">AI 상태</span>
+      <span id="ai-status" class="status-value loading">Checking</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">런타임 모드</span>
+      <span id="runtime-status" class="status-value">--</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">최근 점수</span>
+      <span id="score-status" class="status-value">--</span>
+    </div>
   </div>
-  
+
   <div class="toggle-section">
     <div class="toggle-row">
-      <div class="toggle-info">
-        <div class="toggle-label">Enable PBI Checker</div>
-        <div class="toggle-desc">Monitor prompts on LLM sites</div>
+      <div>
+        <div class="toggle-label">PBI 활성화</div>
+        <div class="toggle-desc">대시보드를 주입하고 입력을 모니터링합니다.</div>
       </div>
       <label class="toggle-switch">
         <input type="checkbox" id="toggle-enabled" checked>
         <span class="toggle-slider"></span>
       </label>
     </div>
-    
+
     <div class="toggle-row">
-      <div class="toggle-info">
-        <div class="toggle-label">Block Low Scores</div>
-        <div class="toggle-desc">Dim send button if PBI &lt; 30%</div>
+      <div>
+        <div class="toggle-label">자동 분석</div>
+        <div class="toggle-desc">입력 중 자동 평가를 실행합니다. 느리면 끄고 수동 분석을 쓰세요.</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-auto-analyze" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">저점수 전송 차단</div>
+        <div class="toggle-desc">임계값 미만 점수는 전송을 막습니다.</div>
       </div>
       <label class="toggle-switch">
         <input type="checkbox" id="toggle-block">
         <span class="toggle-slider"></span>
       </label>
     </div>
-    
+
     <div class="toggle-row">
-      <div class="toggle-info">
-        <div class="toggle-label">Debug Mode</div>
-        <div class="toggle-desc">Log detailed analysis info</div>
+      <div>
+        <div class="toggle-label">디버그 모드</div>
+        <div class="toggle-desc">페이지 콘솔에 상세 로그를 출력합니다.</div>
       </div>
       <label class="toggle-switch">
         <input type="checkbox" id="toggle-debug">
@@ -240,11 +282,11 @@
       </label>
     </div>
   </div>
-  
+
   <div class="footer">
-    <p>v1.0.0 · <a href="https://github.com" target="_blank">GitHub</a></p>
+    <p>v1.2.0 · <a href="https://github.com/lovebubbly/PBT" target="_blank">Repository</a></p>
   </div>
-  
+
   <script src="popup.js"></script>
 </body>
 </html>
